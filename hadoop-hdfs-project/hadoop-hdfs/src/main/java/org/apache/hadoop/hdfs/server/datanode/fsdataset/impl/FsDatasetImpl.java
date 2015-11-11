@@ -174,14 +174,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return reports.toArray(new StorageReport[reports.size()]);
   }
 
-  private long getReadWriteLockKey(String poolId, long blockId) {
-    return poolId.hashCode() ^ blockId;
-  }
-
   @Override
   public FsVolumeImpl getVolume(final ExtendedBlock b) {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.readLock().lock();
       final ReplicaInfo r =  volumeMap.get(b.getBlockPoolId(), b.getLocalBlock());
@@ -194,7 +189,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public Block getStoredBlock(String bpid, long blkid)
       throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid, blkid));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blkid);
     try {
       lock.readLock().lock();
       File blockfile = getFile(bpid, blkid, false);
@@ -736,8 +731,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   private File getBlockFileNoExistsCheck(ExtendedBlock b,
                                          boolean touch)
       throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.readLock().lock();
       final File f = getFile(b.getBlockPoolId(), b.getLocalBlock().getBlockId(), touch);
@@ -809,8 +803,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public ReplicaInputStreams getTmpInputStreams(ExtendedBlock b,
       long blkOffset, long metaOffset) throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.readLock().lock();
       ReplicaInfo info = getReplicaInfo(b);
@@ -1100,8 +1093,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       throw new IOException("The new generation stamp " + newGS + 
           " should be greater than the replica " + b + "'s generation stamp");
     }
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b);
@@ -1146,8 +1138,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   private ReplicaBeingWritten append(String bpid,
       FinalizedReplica replicaInfo, long newGS, long estimateBlockLen)
       throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid,
-      replicaInfo.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(replicaInfo.getBlockId());
     try {
       lock.writeLock().lock();
       // If the block is cached, start uncaching it.
@@ -1262,8 +1253,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       ExtendedBlock b, long newGS, long expectedBlockLen) throws IOException {
     LOG.info("Recover failed append to " + b);
 
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = recoverCheck(b, newGS, expectedBlockLen);
@@ -1293,8 +1283,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public String recoverClose(ExtendedBlock b, long newGS,
       long expectedBlockLen) throws IOException {
     LOG.info("Recover failed close " + b);
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       // check replica's state
@@ -1344,8 +1333,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public ReplicaHandler createRbw(
       StorageType storageType, ExtendedBlock b, boolean allowLazyPersist)
       throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(), b.getBlockId());
@@ -1411,8 +1399,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       throws IOException {
     LOG.info("Recover RBW replica " + b);
 
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
@@ -1483,8 +1470,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     LOG.info("Convert " + b + " from Temporary to RBW, visible length="
         + visible);
 
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       final ReplicaInPipeline temp;
@@ -1637,8 +1623,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       // Don't allow data modifications from interrupted threads
       throw new IOException("Cannot finalize block from Interrupted Thread");
     }
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b);
@@ -1655,8 +1640,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   
   private FinalizedReplica finalizeReplica(String bpid,
       ReplicaInfo replicaInfo) throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid,
-      replicaInfo.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(replicaInfo.getBlockId());
     try {
       lock.writeLock().lock();
       FinalizedReplica newReplicaInfo = null;
@@ -1701,8 +1685,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   @Override // FsDatasetSpi
   public void unfinalizeBlock(ExtendedBlock b) throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(b.getBlockPoolId(),
-      b.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
     try {
       lock.writeLock().lock();
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(), 
@@ -1951,8 +1934,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     for (int i = 0; i < invalidBlks.length; i++) {
       final File f;
       final FsVolumeImpl v;
-      ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid,
-        invalidBlks[i].getBlockId()));
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(invalidBlks[i].getBlockId());
       try {
         lock.writeLock().lock();
         synchronized (this) {
@@ -2070,7 +2052,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     long length, genstamp;
     Executor volumeExecutor;
 
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid, blockId));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
     try {
       lock.writeLock().lock();
       ReplicaInfo info = volumeMap.get(bpid, blockId);
@@ -2142,8 +2124,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   @Override // FsDatasetSpi
   public boolean contains(final ExtendedBlock block) {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(
-      block.getBlockPoolId(), block.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
     try {
       lock.readLock().lock();
       final long blockId = block.getLocalBlock().getBlockId();
@@ -2276,7 +2257,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       File diskMetaFile, FsVolumeSpi vol) throws IOException {
     Block corruptBlock = null;
     ReplicaInfo memBlockInfo;
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid, blockId));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
     try {
       lock.writeLock().lock();
       memBlockInfo = volumeMap.get(bpid, blockId);
@@ -2445,8 +2426,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public ReplicaRecoveryInfo initReplicaRecovery(
       RecoveringBlock rBlock) throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(rBlock.getBlock()
-      .getBlockPoolId(), rBlock.getBlock().getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(rBlock.getBlock().getBlockId());
     try {
       lock.writeLock().lock();
       synchronized (this) {
@@ -2532,8 +2512,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                                     final long newlength) throws IOException {
     //get replica
     final String bpid = oldBlock.getBlockPoolId();
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(bpid,
-      oldBlock.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(oldBlock.getBlockId());
     try {
       lock.writeLock().lock();
       final ReplicaInfo replica = volumeMap.get(bpid, oldBlock.getBlockId());
@@ -2669,8 +2648,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public long getReplicaVisibleLength(final ExtendedBlock block)
   throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(
-      block.getBlockPoolId(), block.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
     try {
       lock.readLock().lock();
       final Replica replica = getReplicaInfo(block.getBlockPoolId(), block.getBlockId());
@@ -2788,8 +2766,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public BlockLocalPathInfo getBlockLocalPathInfo(ExtendedBlock block)
       throws IOException {
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(
-      block.getBlockPoolId(), block.getBlockId()));
+    ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
     try {
       lock.readLock().lock();
       final Replica replica = volumeMap.get(block.getBlockPoolId(), block.getBlockId());
@@ -2975,8 +2952,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       try {
         block = ramDiskReplicaTracker.dequeueNextReplicaToPersist();
         if (block != null) {
-          ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(
-            block.getBlockPoolId(), block.getBlockId()));
+          ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
           try {
             lock.writeLock().lock();
             replicaInfo = volumeMap.get(block.getBlockPoolId(), block.getBlockId());
@@ -3050,8 +3026,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         long blockFileUsed, metaFileUsed;
         final String bpid = replicaState.getBlockPoolId();
 
-        ReentrantReadWriteLock lock = idReadWriteLock.getLock(getReadWriteLockKey(
-          replicaState.getBlockPoolId(), replicaState.getBlockId()));
+        ReentrantReadWriteLock lock = idReadWriteLock.getLock(replicaState.getBlockId());
         try {
           lock.writeLock().lock();
           replicaInfo = getReplicaInfo(replicaState.getBlockPoolId(), replicaState.getBlockId());
