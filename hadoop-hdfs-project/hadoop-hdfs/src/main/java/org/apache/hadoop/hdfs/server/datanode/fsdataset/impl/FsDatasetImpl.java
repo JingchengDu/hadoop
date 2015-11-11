@@ -2308,7 +2308,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         // Block is missing in memory - add the block to volumeMap
         ReplicaInfo diskBlockInfo = new FinalizedReplica(blockId, 
             diskFile.length(), diskGS, vol, diskFile.getParentFile());
-        volumeMap.add(bpid, diskBlockInfo);
+        synchronized (this) {
+          volumeMap.add(bpid, diskBlockInfo);
+        }
         if (vol.isTransientStorage()) {
           long lockedBytesReserved =
               cacheManager.reserve(diskBlockInfo.getNumBytes()) > 0 ?
@@ -2330,10 +2332,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             if (memBlockInfo.getMetaFile().exists()) {
               // We have two sets of block+meta files. Decide which one to
               // keep.
-              ReplicaInfo diskBlockInfo = new FinalizedReplica(
-                  blockId, diskFile.length(), diskGS, vol, diskFile.getParentFile());
-              ((FsVolumeImpl) vol).getBlockPoolSlice(bpid).resolveDuplicateReplicas(
-                  memBlockInfo, diskBlockInfo, volumeMap);
+              synchronized (this) {
+                ReplicaInfo diskBlockInfo = new FinalizedReplica(blockId, diskFile.length(),
+                  diskGS, vol, diskFile.getParentFile());
+                ((FsVolumeImpl) vol).getBlockPoolSlice(bpid).resolveDuplicateReplicas(memBlockInfo,
+                  diskBlockInfo, volumeMap);
+              }
             }
           } else {
             if (!diskFile.delete()) {
@@ -2418,7 +2422,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   @Override 
-  public String getReplicaString(String bpid, long blockId) {
+  public synchronized String getReplicaString(String bpid, long blockId) {
     final Replica r = volumeMap.get(bpid, blockId);
     return r == null? "null": r.toString();
   }
