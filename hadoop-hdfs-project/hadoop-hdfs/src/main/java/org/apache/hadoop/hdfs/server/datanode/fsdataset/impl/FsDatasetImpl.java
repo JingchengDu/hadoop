@@ -2619,7 +2619,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             newBlockId, recoveryId, rur.getVolume(), blockFile.getParentFile(),
             newlength);
         newReplicaInfo.setNumBytes(newlength);
-        volumeMap.add(bpid, newReplicaInfo);
+        synchronized (this) {
+          volumeMap.add(bpid, newReplicaInfo);
+        }
         finalizeReplica(bpid, newReplicaInfo);
       }
    }
