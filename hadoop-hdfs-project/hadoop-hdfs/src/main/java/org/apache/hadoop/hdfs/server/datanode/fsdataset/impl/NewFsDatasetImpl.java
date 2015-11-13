@@ -726,7 +726,9 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(), b.getLocalBlock());
       if (replicaInfo != null && replicaInfo.getState() == ReplicaState.TEMPORARY) {
         // remove from volumeMap
-        volumeMap.remove(b.getBlockPoolId(), b.getLocalBlock());
+        synchronized (this) {
+          volumeMap.remove(b.getBlockPoolId(), b.getLocalBlock());
+        }
 
         // delete the on-disk temp file
         if (delBlockFromDisk(replicaInfo.getBlockFile(), replicaInfo.getMetaFile(),
