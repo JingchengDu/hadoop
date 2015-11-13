@@ -126,7 +126,7 @@ import com.google.common.collect.Sets;
 @InterfaceAudience.Private
 class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   static final Log LOG = LogFactory.getLog(FsDatasetImpl.class);
-  private final static boolean isNativeIOAvailable;
+  final static boolean isNativeIOAvailable;
   static {
     isNativeIOAvailable = NativeIO.isAvailable();
     if (Path.WINDOWS && !isNativeIOAvailable) {
@@ -229,30 +229,30 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     
   final DataNode datanode;
   final DataStorage dataStorage;
-  private final FsVolumeList volumes;
+  final FsVolumeList volumes;
   final Map<String, DatanodeStorage> storageMap;
   final FsDatasetAsyncDiskService asyncDiskService;
   final Daemon lazyWriter;
   final FsDatasetCache cacheManager;
-  private final Configuration conf;
-  private final int volFailuresTolerated;
-  private volatile boolean fsRunning;
+  final Configuration conf;
+  final int volFailuresTolerated;
+  volatile boolean fsRunning;
 
   final ReplicaMap volumeMap;
   final Map<String, Set<Long>> deletingBlock;
   final RamDiskReplicaTracker ramDiskReplicaTracker;
   final RamDiskAsyncLazyPersistService asyncLazyPersistService;
 
-  private static final int MAX_BLOCK_EVICTIONS_PER_ITERATION = 3;
+  static final int MAX_BLOCK_EVICTIONS_PER_ITERATION = 3;
 
-  private final int smallBufferSize;
+  final int smallBufferSize;
 
   // Used for synchronizing access to usage stats
-  private final Object statsLock = new Object();
+  final Object statsLock = new Object();
 
   final LocalFileSystem localFS;
 
-  private boolean blockPinningEnabled;
+  boolean blockPinningEnabled;
   
   /**
    * An FSDataset has a directory where it loads its data files.
@@ -768,7 +768,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    * @throws ReplicaNotFoundException if no entry is in the map or 
    *                        there is a generation stamp mismatch
    */
-  private ReplicaInfo getReplicaInfo(String bpid, long blkid)
+  ReplicaInfo getReplicaInfo(String bpid, long blkid)
       throws ReplicaNotFoundException {
     ReplicaInfo info = volumeMap.get(bpid, blkid);
     if (info == null) {
@@ -801,7 +801,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
   }
 
-  private static FileInputStream openAndSeek(File file, long offset)
+  static FileInputStream openAndSeek(File file, long offset)
       throws IOException {
     RandomAccessFile raf = null;
     try {
@@ -1002,7 +1002,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
   }
 
-  static private void truncateBlock(File blockFile, File metaFile,
+  static void truncateBlock(File blockFile, File metaFile,
       long oldlen, long newlen) throws IOException {
     LOG.info("truncateBlock: blockFile=" + blockFile
         + ", metaFile=" + metaFile
@@ -1161,7 +1161,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return newReplicaInfo;
   }
 
-  private ReplicaInfo recoverCheck(ExtendedBlock b, long newGS, 
+  ReplicaInfo recoverCheck(ExtendedBlock b, long newGS, 
       long expectedBlockLen) throws IOException {
     ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
     
@@ -1257,7 +1257,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    * @param newGS new generation stamp
    * @throws IOException if rename fails
    */
-  private void bumpReplicaGS(ReplicaInfo replicaInfo, 
+  void bumpReplicaGS(ReplicaInfo replicaInfo, 
       long newGS) throws IOException { 
     long oldGS = replicaInfo.getGenerationStamp();
     File oldmeta = replicaInfo.getMetaFile();
@@ -1623,7 +1623,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    * @param b a block
    * @return true if on-disk files are deleted; false otherwise
    */
-  private boolean delBlockFromDisk(File blockFile, File metaFile, Block b) {
+  boolean delBlockFromDisk(File blockFile, File metaFile, Block b) {
     if (blockFile == null) {
       LOG.warn("No file exists for block: " + b);
       return true;
@@ -1946,7 +1946,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   /**
    * Asynchronously attempts to cache a single block via {@link FsDatasetCache}.
    */
-  private void cacheBlock(String bpid, long blockId) {
+  void cacheBlock(String bpid, long blockId) {
     FsVolumeImpl volume;
     String blockFileName;
     long length, genstamp;
@@ -2498,7 +2498,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return finalizeReplica(bpid, rur);
   }
 
-  private File[] copyReplicaWithNewBlockIdAndGS(
+  File[] copyReplicaWithNewBlockIdAndGS(
       ReplicaUnderRecovery replicaInfo, String bpid, long newBlkId, long newGS)
       throws IOException {
     String blockFileName = Block.BLOCK_FILE_PREFIX + newBlkId;
@@ -3007,7 +3007,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
   }
   
-  private void addDeletingBlock(String bpid, Long blockId) {
+  void addDeletingBlock(String bpid, Long blockId) {
     synchronized(deletingBlock) {
       Set<Long> s = deletingBlock.get(bpid);
       if (s == null) {
