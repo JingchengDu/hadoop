@@ -47,12 +47,12 @@ public class IdReadWriteLock {
   private static final int NB_CONCURRENT_LOCKS = 1000;
   // The pool to get entry from, entries are mapped by weak reference to make it able to be
   // garbage-collected asap
-  private final WeakObjectPool<Long, ReentrantReadWriteLock> lockPool =
-      new WeakObjectPool<Long, ReentrantReadWriteLock>(
-          new WeakObjectPool.ObjectFactory<Long, ReentrantReadWriteLock>() {
+  private final WeakObjectPool<Long, Object> lockPool =
+      new WeakObjectPool<Long, Object>(
+          new WeakObjectPool.ObjectFactory<Long, Object>() {
             @Override
-            public ReentrantReadWriteLock createObject(Long id) {
-              return new ReentrantReadWriteLock();
+            public Object createObject(Long id) {
+              return new Object();
             }
           }, NB_CONCURRENT_LOCKS);
   
@@ -72,10 +72,10 @@ public class IdReadWriteLock {
    * Get the ReentrantReadWriteLock corresponding to the given id
    * @param id an arbitrary number to identify the lock
    */
-  public ReentrantReadWriteLock getLock(long id) {
-    ReentrantReadWriteLock readWriteLock = lockPool.get(id);
+  public Object getLock(long id) {
+    Object lock = lockPool.get(id);
     evitThread.evict();
-    return readWriteLock;
+    return lock;
   }
 
   private class EvictThread extends Thread {
@@ -124,18 +124,18 @@ public class IdReadWriteLock {
     return lockPool.size();
   }
 
-  @VisibleForTesting
-  public void waitForWaiters(long id, int numWaiters) throws InterruptedException {
-    for (ReentrantReadWriteLock readWriteLock;;) {
-      readWriteLock = lockPool.get(id);
-      if (readWriteLock != null) {
-        synchronized (readWriteLock) {
-          if (readWriteLock.getQueueLength() >= numWaiters) {
-            return;
-          }
-        }
-      }
-      Thread.sleep(50);
-    }
-  }
+//  @VisibleForTesting
+//  public void waitForWaiters(long id, int numWaiters) throws InterruptedException {
+//    for (ReentrantReadWriteLock readWriteLock;;) {
+//      readWriteLock = lockPool.get(id);
+//      if (readWriteLock != null) {
+//        synchronized (readWriteLock) {
+//          if (readWriteLock.getQueueLength() >= numWaiters) {
+//            return;
+//          }
+//        }
+//      }
+//      Thread.sleep(50);
+//    }
+//  }
 }
