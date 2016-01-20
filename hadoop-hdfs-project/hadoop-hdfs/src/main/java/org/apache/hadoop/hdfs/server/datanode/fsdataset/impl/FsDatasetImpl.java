@@ -500,10 +500,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           for (String bpid : volumeMap.getBlockPoolList()) {
             List<ReplicaInfo> blocks = new ArrayList<>();
             for (Iterator<ReplicaInfo> it = volumeMap.replicas(bpid).iterator();
-               it.hasNext(); ) {
+                 it.hasNext(); ) {
               ReplicaInfo block = it.next();
               final File absBasePath =
-                new File(block.getVolume().getBasePath()).getAbsoluteFile();
+                  new File(block.getVolume().getBasePath()).getAbsoluteFile();
               if (absBasePath.equals(absRoot)) {
                 blocks.add(block);
                 it.remove();
