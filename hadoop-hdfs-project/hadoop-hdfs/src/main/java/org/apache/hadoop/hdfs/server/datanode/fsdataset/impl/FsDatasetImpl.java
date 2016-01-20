@@ -484,39 +484,39 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     Map<String, List<ReplicaInfo>> blkToInvalidate = new HashMap<>();
     List<String> storageToRemove = new ArrayList<>();
     synchronized (this) {
-    for (int idx = 0; idx < dataStorage.getNumStorageDirs(); idx++) {
-      Storage.StorageDirectory sd = dataStorage.getStorageDir(idx);
-      final File absRoot = sd.getRoot().getAbsoluteFile();
-      if (volumesToRemove.contains(absRoot)) {
-        LOG.info("Removing " + absRoot + " from FsDataset.");
+      for (int idx = 0; idx < dataStorage.getNumStorageDirs(); idx++) {
+        Storage.StorageDirectory sd = dataStorage.getStorageDir(idx);
+        final File absRoot = sd.getRoot().getAbsoluteFile();
+        if (volumesToRemove.contains(absRoot)) {
+          LOG.info("Removing " + absRoot + " from FsDataset.");
 
-        // Disable the volume from the service.
-        asyncDiskService.removeVolume(sd.getCurrentDir());
-        volumes.removeVolume(absRoot, clearFailure);
+          // Disable the volume from the service.
+          asyncDiskService.removeVolume(sd.getCurrentDir());
+          volumes.removeVolume(absRoot, clearFailure);
 
           // Removed all replica information for the blocks on the volume.
           // Unlike updating the volumeMap in addVolume(), this operation does
           // not scan disks.
-        for (String bpid : volumeMap.getBlockPoolList()) {
+          for (String bpid : volumeMap.getBlockPoolList()) {
             List<ReplicaInfo> blocks = new ArrayList<>();
-          for (Iterator<ReplicaInfo> it = volumeMap.replicas(bpid).iterator();
+            for (Iterator<ReplicaInfo> it = volumeMap.replicas(bpid).iterator();
                it.hasNext(); ) {
-            ReplicaInfo block = it.next();
-            final File absBasePath =
+              ReplicaInfo block = it.next();
+              final File absBasePath =
                 new File(block.getVolume().getBasePath()).getAbsoluteFile();
-            if (absBasePath.equals(absRoot)) {
+              if (absBasePath.equals(absRoot)) {
                 blocks.add(block);
-              it.remove();
+                it.remove();
+              }
             }
-          }
             blkToInvalidate.put(bpid, blocks);
-        }
+          }
 
           storageToRemove.add(sd.getStorageUuid());
+        }
       }
+      setupAsyncLazyPersistThreads();
     }
-    setupAsyncLazyPersistThreads();
-  }
 
     // Call this outside the lock.
     for (Map.Entry<String, List<ReplicaInfo>> entry :
@@ -1954,11 +1954,11 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public void invalidate(String bpid, ReplicaInfo block) {
     // If a DFSClient has the replica in its cache of short-circuit file
     // descriptors (and the client is using ShortCircuitShm), invalidate it.
-      datanode.getShortCircuitRegistry().processBlockInvalidation(
-          new ExtendedBlockId(block.getBlockId(), bpid));
+    datanode.getShortCircuitRegistry().processBlockInvalidation(
+        new ExtendedBlockId(block.getBlockId(), bpid));
 
-      // If the block is cached, start uncaching it.
-      cacheManager.uncacheBlock(bpid, block.getBlockId());
+    // If the block is cached, start uncaching it.
+    cacheManager.uncacheBlock(bpid, block.getBlockId());
 
     datanode.notifyNamenodeDeletedBlock(new ExtendedBlock(bpid, block),
         block.getStorageUuid());
@@ -2531,14 +2531,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       throws IOException {
     String blockFileName = Block.BLOCK_FILE_PREFIX + newBlkId;
     FsVolumeImpl v = (FsVolumeImpl) replicaInfo.getVolume();
-      final File tmpDir = v.getBlockPoolSlice(bpid).getTmpDir();
-      final File destDir = DatanodeUtil.idToBlockDir(tmpDir, newBlkId);
-      final File dstBlockFile = new File(destDir, blockFileName);
-      final File dstMetaFile = FsDatasetUtil.getMetaFile(dstBlockFile, newGS);
-      return copyBlockFiles(replicaInfo.getMetaFile(),
-          replicaInfo.getBlockFile(),
-          dstMetaFile, dstBlockFile, true, smallBufferSize, conf);
-    }
+    final File tmpDir = v.getBlockPoolSlice(bpid).getTmpDir();
+    final File destDir = DatanodeUtil.idToBlockDir(tmpDir, newBlkId);
+    final File dstBlockFile = new File(destDir, blockFileName);
+    final File dstMetaFile = FsDatasetUtil.getMetaFile(dstBlockFile, newGS);
+    return copyBlockFiles(replicaInfo.getMetaFile(),
+        replicaInfo.getBlockFile(),
+        dstMetaFile, dstBlockFile, true, smallBufferSize, conf);
+  }
 
   @Override // FsDatasetSpi
   public synchronized long getReplicaVisibleLength(final ExtendedBlock block)
