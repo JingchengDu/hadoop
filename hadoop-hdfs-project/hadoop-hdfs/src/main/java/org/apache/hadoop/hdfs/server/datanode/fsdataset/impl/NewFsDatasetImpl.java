@@ -578,6 +578,10 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     // If the block is cached, start uncaching it.
     cacheManager.uncacheBlock(bpid, replicaInfo.getBlockId());
 
+    // If there are any hardlinks to the block, break them.  This ensures we are
+    // not appending to a file that is part of a previous/ directory.
+    replicaInfo.breakHardLinksIfNeeded();
+
     // construct a RBW replica with the new GS
     File blkfile = replicaInfo.getBlockFile();
     FsVolumeImpl v = (FsVolumeImpl) replicaInfo.getVolume();
@@ -1108,6 +1112,7 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
       throw new IOException("rur.getNumBytes() < newlength = " + newlength + ", rur=" + rur);
     }
     if (rur.getNumBytes() > newlength) {
+      rur.breakHardLinksIfNeeded();
       truncateBlock(blockFile, metaFile, rur.getNumBytes(), newlength);
       if (!copyOnTruncate) {
         // update RUR with the new length
@@ -1115,8 +1120,14 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
       } else {
         // Copying block to a new block with new blockId.
         // Not truncating original block.
+        FsVolumeSpi volume = rur.getVolume();
+        String blockPath = blockFile.getAbsolutePath();
+        String volumePath = volume.getBasePath();
+        assert blockPath.startsWith(volumePath) :
+            "New block file: " + blockPath + " must be on " +
+                "same volume as recovery replica: " + volumePath;
         ReplicaBeingWritten newReplicaInfo = new ReplicaBeingWritten(newBlockId, recoveryId,
-          rur.getVolume(), blockFile.getParentFile(), newlength);
+          volume, blockFile.getParentFile(), newlength);
         newReplicaInfo.setNumBytes(newlength);
         synchronized (this) {
           volumeMap.add(bpid, newReplicaInfo);
