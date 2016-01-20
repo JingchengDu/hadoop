@@ -26,8 +26,11 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.DF;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataStorage;
+import org.apache.hadoop.hdfs.server.datanode.DatanodeUtil;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
 import org.apache.hadoop.hdfs.server.datanode.FsDatasetTestUtils;
 import org.apache.hadoop.hdfs.server.datanode.Replica;
@@ -45,7 +48,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Random;
 
 /**
@@ -175,6 +182,10 @@ public class FsDatasetImplTestUtils implements FsDatasetTestUtils {
     dataset = (FsDatasetImpl) datanode.getFSDataset();
   }
 
+  private File getBlockFile(ExtendedBlock eb) throws IOException {
+    return dataset.getBlockFile(eb.getBlockPoolId(), eb.getBlockId());
+  }
+
   /**
    * Return a materialized replica from the FsDatasetImpl.
    */
@@ -234,7 +245,6 @@ public class FsDatasetImplTestUtils implements FsDatasetTestUtils {
     dataset.volumeMap.add(block.getBlockPoolId(), rip);
     return rip;
   }
-
 
   @Override
   public Replica createRBW(ExtendedBlock eb) throws IOException {
@@ -341,6 +351,97 @@ public class FsDatasetImplTestUtils implements FsDatasetTestUtils {
       DF df = new DF(new File(volRefs.get(0).getBasePath()),
           dataset.datanode.getConf());
       return df.getCapacity();
+    }
+  }
+
+  @Override
+  public long getStoredDataLength(ExtendedBlock block) throws IOException {
+    File f = getBlockFile(block);
+    try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
+      return raf.length();
+    }
+  }
+
+  @Override
+  public long getStoredGenerationStamp(ExtendedBlock block) throws IOException {
+    File f = getBlockFile(block);
+    File dir = f.getParentFile();
+    File[] files = FileUtil.listFiles(dir);
+    return FsDatasetUtil.getGenerationStampFromFile(files, f);
+  }
+
+  @Override
+  public void changeStoredGenerationStamp(
+      ExtendedBlock block, long newGenStamp) throws IOException {
+    File blockFile =
+        dataset.getBlockFile(block.getBlockPoolId(), block.getBlockId());
+    File metaFile = FsDatasetUtil.findMetaFile(blockFile);
+    File newMetaFile = new File(
+        DatanodeUtil.getMetaName(blockFile.getAbsolutePath(), newGenStamp));
+    Files.move(metaFile.toPath(), newMetaFile.toPath(),
+        StandardCopyOption.ATOMIC_MOVE);
+  }
+
+  @Override
+  public Iterator<Replica> getStoredReplicas(String bpid) throws IOException {
+    // Reload replicas from the disk.
+    ReplicaMap replicaMap = new ReplicaMap(dataset);
+    try (FsVolumeReferences refs = dataset.getFsVolumeReferences()) {
+      for (FsVolumeSpi vol : refs) {
+        FsVolumeImpl volume = (FsVolumeImpl) vol;
+        volume.getVolumeMap(bpid, replicaMap, dataset.ramDiskReplicaTracker);
+      }
+    }
+
+    // Cast ReplicaInfo to Replica, because ReplicaInfo assumes a file-based
+    // FsVolumeSpi implementation.
+    List<Replica> ret = new ArrayList<>();
+    if (replicaMap.replicas(bpid) != null) {
+      ret.addAll(replicaMap.replicas(bpid));
+    }
+    return ret.iterator();
+  }
+
+  @Override
+  public long getPendingAsyncDeletions() {
+    return dataset.asyncDiskService.countPendingDeletions();
+  }
+
+  @Override
+  public void verifyBlockPoolExists(String bpid) throws IOException {
+    FsVolumeImpl volume;
+    try (FsVolumeReferences references = dataset.getFsVolumeReferences()) {
+      volume = (FsVolumeImpl) references.get(0);
+    }
+    File bpDir = new File(volume.getCurrentDir(), bpid);
+    File bpCurrentDir = new File(bpDir, DataStorage.STORAGE_DIR_CURRENT);
+    File finalizedDir = new File(bpCurrentDir,
+        DataStorage.STORAGE_DIR_FINALIZED);
+    File rbwDir = new File(bpCurrentDir, DataStorage.STORAGE_DIR_RBW);
+    File versionFile = new File(bpCurrentDir, "VERSION");
+
+    if (!finalizedDir.isDirectory()) {
+      throw new IOException(finalizedDir.getPath() + " is not a directory.");
+    }
+    if (!rbwDir.isDirectory()) {
+      throw new IOException(finalizedDir.getPath() + " is not a directory.");
+    }
+    if (!versionFile.exists()) {
+      throw new IOException(
+          "Version file: " + versionFile.getPath() + " does not exist.");
+    }
+  }
+
+  @Override
+  public void verifyBlockPoolMissing(String bpid) throws IOException {
+    FsVolumeImpl volume;
+    try (FsVolumeReferences references = dataset.getFsVolumeReferences()) {
+      volume = (FsVolumeImpl) references.get(0);
+    }
+    File bpDir = new File(volume.getCurrentDir(), bpid);
+    if (bpDir.exists()) {
+      throw new IOException(
+          String.format("Block pool directory %s exists", bpDir));
     }
   }
 }

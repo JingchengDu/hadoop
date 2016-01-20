@@ -123,6 +123,10 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
             + appId;
       }
 
+      public String getAttemptNode(String appId, String attemptId) {
+        return getAppNode(appId) + "/" + attemptId;
+      }
+
       /**
        * Emulating retrying createRootDir not to raise NodeExist exception
        * @throws Exception
@@ -165,6 +169,13 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
       return null != curatorFramework.checkExists()
           .forPath(store.getAppNode(app.getApplicationId().toString()));
     }
+
+    public boolean attemptExists(RMAppAttempt attempt) throws Exception {
+      ApplicationAttemptId attemptId = attempt.getAppAttemptId();
+      return null != curatorFramework.checkExists()
+          .forPath(store.getAttemptNode(
+              attemptId.getApplicationId().toString(), attemptId.toString()));
+    }
   }
 
   @Test (timeout = 60000)
@@ -177,6 +188,7 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
     testAppDeletion(zkTester);
     testDeleteStore(zkTester);
     testRemoveApplication(zkTester);
+    testRemoveAttempt(zkTester);
     testAMRMTokenSecretManagerStateStore(zkTester);
     testReservationStateStore(zkTester);
     ((TestZKRMStateStoreTester.TestZKRMStateStoreInternal)
@@ -488,6 +500,7 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
     ApplicationSubmissionContext context =
         new ApplicationSubmissionContextPBImpl();
     context.setApplicationId(appIdRemoved);
+
     ApplicationStateData appStateRemoved =
         ApplicationStateData.newInstance(
             submitTime, startTime, context, "user1");

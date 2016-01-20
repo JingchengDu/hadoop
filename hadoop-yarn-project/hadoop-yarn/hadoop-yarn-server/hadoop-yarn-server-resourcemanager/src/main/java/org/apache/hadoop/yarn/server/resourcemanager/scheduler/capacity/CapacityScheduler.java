@@ -68,6 +68,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SchedulerResourceTypes;
+import org.apache.hadoop.yarn.security.Permission;
 import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
@@ -92,7 +93,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeDecreaseContai
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ContainerPreemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.NodeType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.PreemptableResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue;
@@ -114,13 +114,14 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptA
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.ContainerExpiredSchedulerEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.ContainerRescheduledEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.ContainerPreemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeLabelsUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeResourceUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.utils.Lock;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
@@ -533,11 +534,13 @@ public class CapacityScheduler extends
   @VisibleForTesting
   public static void setQueueAcls(YarnAuthorizationProvider authorizer,
       Map<String, CSQueue> queues) throws IOException {
+    List<Permission> permissions = new ArrayList<>();
     for (CSQueue queue : queues.values()) {
       AbstractCSQueue csQueue = (AbstractCSQueue) queue;
-      authorizer.setPermission(csQueue.getPrivilegedEntity(),
-        csQueue.getACLs(), UserGroupInformation.getCurrentUser());
+      permissions.add(
+          new Permission(csQueue.getPrivilegedEntity(), csQueue.getACLs()));
     }
+    authorizer.setPermission(permissions, UserGroupInformation.getCurrentUser());
   }
 
   private Map<String, Set<String>> getQueueToLabels() {
@@ -647,10 +650,10 @@ public class CapacityScheduler extends
       parentQueue.setChildQueues(childQueues);
     }
 
-    if(queue instanceof LeafQueue == true && queues.containsKey(queueName)
-      && queues.get(queueName) instanceof LeafQueue == true) {
+    if (queue instanceof LeafQueue && queues.containsKey(queueName)
+        && queues.get(queueName) instanceof LeafQueue) {
       throw new IOException("Two leaf queues were named " + queueName
-        + ". Leaf queue names must be distinct");
+          + ". Leaf queue names must be distinct");
     }
     queues.put(queueName, queue);
 
@@ -783,7 +786,7 @@ public class CapacityScheduler extends
 
     FiCaSchedulerApp attempt = new FiCaSchedulerApp(applicationAttemptId,
         application.getUser(), queue, queue.getActiveUsersManager(), rmContext,
-        application.getPriority());
+            application.getPriority(), isAttemptRecovering);
     if (transferStateFromPreviousAttempt) {
       attempt.transferStateFromPreviousAttempt(
           application.getCurrentAppAttempt());
@@ -862,7 +865,7 @@ public class CapacityScheduler extends
         LOG.info("Skip killing " + rmContainer.getContainerId());
         continue;
       }
-      completedContainer(
+      super.completedContainer(
         rmContainer,
         SchedulerUtils.createAbnormalContainerStatus(
           rmContainer.getContainerId(), SchedulerUtils.COMPLETED_APPLICATION),
@@ -871,7 +874,7 @@ public class CapacityScheduler extends
 
     // Release all reserved containers
     for (RMContainer rmContainer : attempt.getReservedContainers()) {
-      completedContainer(
+      super.completedContainer(
         rmContainer,
         SchedulerUtils.createAbnormalContainerStatus(
           rmContainer.getContainerId(), "Application Complete"),
@@ -960,7 +963,7 @@ public class CapacityScheduler extends
         updateDemandForQueue = (LeafQueue) application.getQueue();
       }
 
-      if (application.isWaitingForAMContainer(application.getApplicationId())) {
+      if (application.isWaitingForAMContainer()) {
         // Allocate is for AM and update AM blacklist for this
         application.updateAMBlacklist(
             blacklistAdditions, blacklistRemovals);
@@ -975,7 +978,8 @@ public class CapacityScheduler extends
                    clusterResource, getMinimumResourceCapability());
     }
 
-    if (updateDemandForQueue != null) {
+    if (updateDemandForQueue != null && !application
+        .isWaitingForAMContainer()) {
       updateDemandForQueue.getOrderingPolicy().demandUpdated(application);
     }
 
@@ -1044,7 +1048,7 @@ public class CapacityScheduler extends
     for (ContainerStatus completedContainer : completedContainers) {
       ContainerId containerId = completedContainer.getContainerId();
       RMContainer container = getRMContainer(containerId);
-      completedContainer(container, completedContainer,
+      super.completedContainer(container, completedContainer,
         RMContainerEventType.FINISHED);
       if (container != null) {
         releasedContainers++;
@@ -1062,6 +1066,11 @@ public class CapacityScheduler extends
     schedulerHealth.updateSchedulerReleaseDetails(lastNodeUpdateTime,
       releaseResources);
     schedulerHealth.updateSchedulerReleaseCounts(releasedContainers);
+
+    // Updating node resource utilization
+    node.setAggregatedContainersUtilization(
+        nm.getAggregatedContainersUtilization());
+    node.setNodeUtilization(nm.getNodeUtilization());
 
     // Now node data structures are upto date and ready for scheduling.
     if(LOG.isDebugEnabled()) {
@@ -1120,7 +1129,7 @@ public class CapacityScheduler extends
     // Unreserve container on this node
     RMContainer reservedContainer = node.getReservedContainer();
     if (null != reservedContainer) {
-      dropContainerReservation(reservedContainer);
+      killReservedContainer(reservedContainer);
     }
     
     // Update node labels after we've done this
@@ -1364,42 +1373,35 @@ public class CapacityScheduler extends
       ContainerExpiredSchedulerEvent containerExpiredEvent = 
           (ContainerExpiredSchedulerEvent) event;
       ContainerId containerId = containerExpiredEvent.getContainerId();
-      completedContainer(getRMContainer(containerId), 
+      super.completedContainer(getRMContainer(containerId),
           SchedulerUtils.createAbnormalContainerStatus(
               containerId, 
               SchedulerUtils.EXPIRED_CONTAINER), 
           RMContainerEventType.EXPIRE);
     }
     break;
-    case DROP_RESERVATION:
+    case KILL_RESERVED_CONTAINER:
     {
-      ContainerPreemptEvent dropReservationEvent = (ContainerPreemptEvent)event;
-      RMContainer container = dropReservationEvent.getContainer();
-      dropContainerReservation(container);
+      ContainerPreemptEvent killReservedContainerEvent =
+          (ContainerPreemptEvent) event;
+      RMContainer container = killReservedContainerEvent.getContainer();
+      killReservedContainer(container);
     }
     break;
-    case PREEMPT_CONTAINER:
+    case MARK_CONTAINER_FOR_PREEMPTION:
     {
       ContainerPreemptEvent preemptContainerEvent =
           (ContainerPreemptEvent)event;
       ApplicationAttemptId aid = preemptContainerEvent.getAppId();
       RMContainer containerToBePreempted = preemptContainerEvent.getContainer();
-      preemptContainer(aid, containerToBePreempted);
+      markContainerForPreemption(aid, containerToBePreempted);
     }
     break;
-    case KILL_CONTAINER:
+    case KILL_PREEMPTED_CONTAINER:
     {
       ContainerPreemptEvent killContainerEvent = (ContainerPreemptEvent)event;
       RMContainer containerToBeKilled = killContainerEvent.getContainer();
-      killContainer(containerToBeKilled);
-    }
-    break;
-    case CONTAINER_RESCHEDULED:
-    {
-      ContainerRescheduledEvent containerRescheduledEvent =
-          (ContainerRescheduledEvent) event;
-      RMContainer container = containerRescheduledEvent.getContainer();
-      recoverResourceRequestForContainer(container);
+      killPreemptedContainer(containerToBeKilled);
     }
     break;
     default:
@@ -1411,12 +1413,12 @@ public class CapacityScheduler extends
     FiCaSchedulerNode schedulerNode = new FiCaSchedulerNode(nodeManager,
         usePortForNodeName, nodeManager.getNodeLabels());
     this.nodes.put(nodeManager.getNodeID(), schedulerNode);
-    Resources.addTo(clusterResource, nodeManager.getTotalCapability());
+    Resources.addTo(clusterResource, schedulerNode.getTotalResource());
 
     // update this node to node label manager
     if (labelManager != null) {
       labelManager.activateNode(nodeManager.getNodeID(),
-          nodeManager.getTotalCapability());
+          schedulerNode.getTotalResource());
     }
     
     root.updateClusterResource(clusterResource, new ResourceLimits(
@@ -1442,7 +1444,7 @@ public class CapacityScheduler extends
     if (node == null) {
       return;
     }
-    Resources.subtractFrom(clusterResource, node.getRMNode().getTotalCapability());
+    Resources.subtractFrom(clusterResource, node.getTotalResource());
     root.updateClusterResource(clusterResource, new ResourceLimits(
         clusterResource));
     int numNodes = numNodeManagers.decrementAndGet();
@@ -1454,7 +1456,7 @@ public class CapacityScheduler extends
     // Remove running containers
     List<RMContainer> runningContainers = node.getRunningContainers();
     for (RMContainer container : runningContainers) {
-      completedContainer(container, 
+      super.completedContainer(container,
           SchedulerUtils.createAbnormalContainerStatus(
               container.getContainerId(), 
               SchedulerUtils.LOST_CONTAINER), 
@@ -1464,7 +1466,7 @@ public class CapacityScheduler extends
     // Remove reservations, if any
     RMContainer reservedContainer = node.getReservedContainer();
     if (reservedContainer != null) {
-      completedContainer(reservedContainer, 
+      super.completedContainer(reservedContainer,
           SchedulerUtils.createAbnormalContainerStatus(
               reservedContainer.getContainerId(), 
               SchedulerUtils.LOST_CONTAINER), 
@@ -1480,13 +1482,9 @@ public class CapacityScheduler extends
   
   @Lock(CapacityScheduler.class)
   @Override
-  protected synchronized void completedContainer(RMContainer rmContainer,
-      ContainerStatus containerStatus, RMContainerEventType event) {
-    if (rmContainer == null) {
-      LOG.info("Container " + containerStatus.getContainerId() +
-          " completed with event " + event);
-      return;
-    }
+  protected synchronized void completedContainerInternal(
+      RMContainer rmContainer, ContainerStatus containerStatus,
+      RMContainerEventType event) {
     
     Container container = rmContainer.getContainer();
     
@@ -1588,11 +1586,14 @@ public class CapacityScheduler extends
   }
 
   @Override
-  public void dropContainerReservation(RMContainer container) {
+  public void killReservedContainer(RMContainer container) {
     if(LOG.isDebugEnabled()){
-      LOG.debug("DROP_RESERVATION:" + container.toString());
+      LOG.debug(SchedulerEventType.KILL_RESERVED_CONTAINER + ":"
+          + container.toString());
     }
-    completedContainer(container,
+    // To think: What happens if this is no longer a reserved container, for
+    // e.g if the reservation became an allocation.
+    super.completedContainer(container,
         SchedulerUtils.createAbnormalContainerStatus(
             container.getContainerId(),
             SchedulerUtils.UNRESERVED_CONTAINER),
@@ -1600,25 +1601,28 @@ public class CapacityScheduler extends
   }
 
   @Override
-  public void preemptContainer(ApplicationAttemptId aid, RMContainer cont) {
+  public void markContainerForPreemption(ApplicationAttemptId aid,
+      RMContainer cont) {
     if(LOG.isDebugEnabled()){
-      LOG.debug("PREEMPT_CONTAINER: application:" + aid.toString() +
-          " container: " + cont.toString());
+      LOG.debug(SchedulerEventType.MARK_CONTAINER_FOR_PREEMPTION
+            + ": appAttempt:" + aid.toString() + " container: "
+            + cont.toString());
     }
     FiCaSchedulerApp app = getApplicationAttempt(aid);
     if (app != null) {
-      app.addPreemptContainer(cont.getContainerId());
+      app.markContainerForPreemption(cont.getContainerId());
     }
   }
 
   @Override
-  public void killContainer(RMContainer cont) {
+  public void killPreemptedContainer(RMContainer cont) {
     if (LOG.isDebugEnabled()) {
-      LOG.debug("KILL_CONTAINER: container" + cont.toString());
+      LOG.debug(SchedulerEventType.KILL_PREEMPTED_CONTAINER + ": container"
+          + cont.toString());
     }
-    completedContainer(cont, SchedulerUtils.createPreemptedContainerStatus(
-      cont.getContainerId(), SchedulerUtils.PREEMPTED_CONTAINER),
-      RMContainerEventType.KILL);
+    super.completedContainer(cont, SchedulerUtils
+        .createPreemptedContainerStatus(cont.getContainerId(),
+        SchedulerUtils.PREEMPTED_CONTAINER), RMContainerEventType.KILL);
   }
 
   @Override
@@ -1981,9 +1985,10 @@ public class CapacityScheduler extends
     rmApp.getApplicationSubmissionContext().setPriority(appPriority);
 
     // Update to state store
-    ApplicationStateData appState = ApplicationStateData.newInstance(
-        rmApp.getSubmitTime(), rmApp.getStartTime(),
-        rmApp.getApplicationSubmissionContext(), rmApp.getUser());
+    ApplicationStateData appState =
+        ApplicationStateData.newInstance(rmApp.getSubmitTime(),
+            rmApp.getStartTime(), rmApp.getApplicationSubmissionContext(),
+            rmApp.getUser(), rmApp.getCallerContext());
     rmContext.getStateStore().updateApplicationStateSynchronously(appState,
         false);
 

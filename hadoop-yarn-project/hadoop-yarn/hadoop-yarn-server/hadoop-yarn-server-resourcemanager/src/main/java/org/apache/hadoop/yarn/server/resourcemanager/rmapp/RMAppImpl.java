@@ -45,6 +45,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DataInputByteBuffer;
+import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -137,8 +138,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   private final Set<String> applicationTags;
 
   private final long attemptFailuresValidityInterval;
-  private final boolean amBlacklistingEnabled;
-  private final float blacklistDisableThreshold;
+  private boolean amBlacklistingEnabled = false;
+  private float blacklistDisableThreshold;
 
   private Clock systemClock;
 
@@ -148,6 +149,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   private long startTime;
   private long finishTime = 0;
   private long storedFinishTime = 0;
+  private int firstAttemptIdInStateStore = 1;
+  private int nextAttemptId = 1;
   // This field isn't protected by readlock now.
   private volatile RMAppAttempt currentAttempt;
   private String queue;
@@ -177,6 +180,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   private RMAppState targetedFinalState;
   private RMAppState recoveredFinalState;
   private ResourceRequest amReq;
+  
+  private CallerContext callerContext;
 
   Object transitionTodo;
 
@@ -384,7 +389,9 @@ public class RMAppImpl implements RMApp, Recoverable {
                                                                  stateMachine;
 
   private static final int DUMMY_APPLICATION_ATTEMPT_NUMBER = -1;
-  
+  private static final float MINIMUM_THRESHOLD_VALUE = 0.0f;
+  private static final float MAXIMUM_THRESHOLD_VALUE = 1.0f;
+
   public RMAppImpl(ApplicationId applicationId, RMContext rmContext,
       Configuration config, String name, String user, String queue,
       ApplicationSubmissionContext submissionContext, YarnScheduler scheduler,
@@ -392,7 +399,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       String applicationType, Set<String> applicationTags, 
       ResourceRequest amReq) {
 
-    this.systemClock = new SystemClock();
+    this.systemClock = SystemClock.getInstance();
 
     this.applicationId = applicationId;
     this.name = name;
@@ -439,8 +446,7 @@ public class RMAppImpl implements RMApp, Recoverable {
 
     this.stateMachine = stateMachineFactory.make(this);
 
-    rmContext.getRMApplicationHistoryWriter().applicationStarted(this);
-    rmContext.getSystemMetricsPublisher().appCreated(this, startTime);
+    this.callerContext = CallerContext.getCurrent();
 
     long localLogAggregationStatusTimeout =
         conf.getLong(YarnConfiguration.LOG_AGGREGATION_STATUS_TIME_OUT_MS,
@@ -463,16 +469,43 @@ public class RMAppImpl implements RMApp, Recoverable {
         YarnConfiguration.RM_MAX_LOG_AGGREGATION_DIAGNOSTICS_IN_MEMORY,
         YarnConfiguration.DEFAULT_RM_MAX_LOG_AGGREGATION_DIAGNOSTICS_IN_MEMORY);
 
-    amBlacklistingEnabled = conf.getBoolean(
-        YarnConfiguration.AM_BLACKLISTING_ENABLED,
-        YarnConfiguration.DEFAULT_AM_BLACKLISTING_ENABLED);
-
-    if (amBlacklistingEnabled) {
-      blacklistDisableThreshold = conf.getFloat(
-          YarnConfiguration.AM_BLACKLISTING_DISABLE_THRESHOLD,
-          YarnConfiguration.DEFAULT_AM_BLACKLISTING_DISABLE_THRESHOLD);
-    } else {
+    // amBlacklistingEnabled can be configured globally and by each
+    // application.
+    // Case 1: If AMBlackListRequest is available in submission context, we
+    // will consider only app level request (RM level configuration will be
+    // skipped).
+    // Case 2: AMBlackListRequest is available in submission context and
+    // amBlacklisting is disabled. In this case, AM blacklisting wont be
+    // enabled for this app even if this feature is enabled in RM level.
+    // Case 3: AMBlackListRequest is not available through submission context.
+    // RM level AM black listing configuration will be considered.
+    if (null != submissionContext.getAMBlackListRequest()) {
+      amBlacklistingEnabled = submissionContext.getAMBlackListRequest()
+          .isAMBlackListingEnabled();
       blacklistDisableThreshold = 0.0f;
+      if (amBlacklistingEnabled) {
+        blacklistDisableThreshold = submissionContext.getAMBlackListRequest()
+            .getBlackListingDisableFailureThreshold();
+
+        // Verify whether blacklistDisableThreshold is valid. And for invalid
+        // threshold, reset to global level blacklistDisableThreshold
+        // configured.
+        if (blacklistDisableThreshold < MINIMUM_THRESHOLD_VALUE
+            || blacklistDisableThreshold > MAXIMUM_THRESHOLD_VALUE) {
+          blacklistDisableThreshold = conf.getFloat(
+              YarnConfiguration.AM_BLACKLISTING_DISABLE_THRESHOLD,
+              YarnConfiguration.DEFAULT_AM_BLACKLISTING_DISABLE_THRESHOLD);
+        }
+      }
+    } else {
+      amBlacklistingEnabled = conf.getBoolean(
+          YarnConfiguration.AM_BLACKLISTING_ENABLED,
+          YarnConfiguration.DEFAULT_AM_BLACKLISTING_ENABLED);
+      if (amBlacklistingEnabled) {
+        blacklistDisableThreshold = conf.getFloat(
+            YarnConfiguration.AM_BLACKLISTING_DISABLE_THRESHOLD,
+            YarnConfiguration.DEFAULT_AM_BLACKLISTING_DISABLE_THRESHOLD);
+      }
     }
   }
 
@@ -488,21 +521,15 @@ public class RMAppImpl implements RMApp, Recoverable {
 
   @Override
   public FinalApplicationStatus getFinalApplicationStatus() {
-    this.readLock.lock();
-    try {
-      // finish state is obtained based on the state machine's current state 
-      // as a fall-back in case the application has not been unregistered 
-      // ( or if the app never unregistered itself )
-      // when the report is requested
-      if (currentAttempt != null 
-          && currentAttempt.getFinalApplicationStatus() != null) {
-        return currentAttempt.getFinalApplicationStatus();   
-      }
-      return 
-          createFinalApplicationStatus(this.stateMachine.getCurrentState());
-    } finally {
-      this.readLock.unlock();
+    // finish state is obtained based on the state machine's current state
+    // as a fall-back in case the application has not been unregistered
+    // ( or if the app never unregistered itself )
+    // when the report is requested
+    if (currentAttempt != null
+        && currentAttempt.getFinalApplicationStatus() != null) {
+      return currentAttempt.getFinalApplicationStatus();
     }
+    return createFinalApplicationStatus(this.stateMachine.getCurrentState());
   }
 
   @Override
@@ -649,7 +676,8 @@ public class RMAppImpl implements RMApp, Recoverable {
           progress = currentAttempt.getProgress();
           logAggregationStatus = this.getLogAggregationStatusForAppReport();
         }
-        diags = this.diagnostics.toString();
+        //if the diagnostics is not already set get it from attempt
+        diags = getDiagnostics().toString();
 
         if (currentAttempt != null && 
             currentAttempt.getAppAttemptState() == RMAppAttemptState.LAUNCHED) {
@@ -754,8 +782,13 @@ public class RMAppImpl implements RMApp, Recoverable {
   @Override
   public StringBuilder getDiagnostics() {
     this.readLock.lock();
-
     try {
+      if (diagnostics.length() == 0 && getCurrentAppAttempt() != null) {
+        String appAttemptDiagnostics = getCurrentAppAttempt().getDiagnostics();
+        if (appAttemptDiagnostics != null) {
+          return new StringBuilder(appAttemptDiagnostics);
+        }
+      }
       return this.diagnostics;
     } finally {
       this.readLock.unlock();
@@ -806,6 +839,15 @@ public class RMAppImpl implements RMApp, Recoverable {
         .getDiagnostics());
     this.storedFinishTime = appState.getFinishTime();
     this.startTime = appState.getStartTime();
+    this.callerContext = appState.getCallerContext();
+    // If interval > 0, some attempts might have been deleted.
+    if (submissionContext.getAttemptFailuresValidityInterval() > 0) {
+      this.firstAttemptIdInStateStore = appState.getFirstAttemptId();
+      this.nextAttemptId = firstAttemptIdInStateStore;
+    }
+
+    // send the ATS create Event
+    sendATSCreateEvent(this, this.startTime);
 
     for(int i=0; i<appState.getAttemptCount(); ++i) {
       // create attempt
@@ -816,7 +858,7 @@ public class RMAppImpl implements RMApp, Recoverable {
 
   private void createNewAttempt() {
     ApplicationAttemptId appAttemptId =
-        ApplicationAttemptId.newInstance(applicationId, attempts.size() + 1);
+        ApplicationAttemptId.newInstance(applicationId, nextAttemptId++);
 
     BlacklistManager currentAMBlacklist;
     if (currentAttempt != null) {
@@ -977,16 +1019,6 @@ public class RMAppImpl implements RMApp, Recoverable {
       // recover attempts
       app.recoverAppAttempts();
 
-      // Last attempt is in final state, return ACCEPTED waiting for last
-      // RMAppAttempt to send finished or failed event back.
-      if (app.currentAttempt != null
-          && (app.currentAttempt.getState() == RMAppAttemptState.KILLED
-              || app.currentAttempt.getState() == RMAppAttemptState.FINISHED
-              || (app.currentAttempt.getState() == RMAppAttemptState.FAILED
-                  && app.getNumFailedAppAttempts() == app.maxAppAttempts))) {
-        return RMAppState.ACCEPTED;
-      }
-
       // YARN-1507 is saving the application state after the application is
       // accepted. So after YARN-1507, an app is saved meaning it is accepted.
       // Thus we return ACCECPTED state on recovery.
@@ -1078,6 +1110,9 @@ public class RMAppImpl implements RMApp, Recoverable {
       // communication
       LOG.info("Storing application with id " + app.applicationId);
       app.rmContext.getStateStore().storeNewApplication(app);
+
+      // send the ATS create Event
+      app.sendATSCreateEvent(app, app.startTime);
     }
   }
 
@@ -1115,10 +1150,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     default:
       break;
     }
+
     ApplicationStateData appState =
         ApplicationStateData.newInstance(this.submitTime, this.startTime,
             this.user, this.submissionContext,
-            stateToBeStored, diags, this.storedFinishTime);
+            stateToBeStored, diags, this.storedFinishTime, this.callerContext);
     this.rmContext.getStateStore().updateApplicationState(appState);
   }
 
@@ -1304,6 +1340,9 @@ public class RMAppImpl implements RMApp, Recoverable {
               + app.attemptFailuresValidityInterval + " milliseconds " : " ")
           + "is " + numberOfFailure + ". The max attempts is "
           + app.maxAppAttempts);
+
+      removeExcessAttempts(app);
+
       if (!app.submissionContext.getUnmanagedAM()
           && numberOfFailure < app.maxAppAttempts) {
         if (initialState.equals(RMAppState.KILLING)) {
@@ -1338,6 +1377,19 @@ public class RMAppImpl implements RMApp, Recoverable {
           new AttemptFailedFinalStateSavedTransition(), RMAppState.FAILED,
           RMAppState.FAILED);
         return RMAppState.FINAL_SAVING;
+      }
+    }
+
+    private void removeExcessAttempts(RMAppImpl app) {
+      while (app.nextAttemptId - app.firstAttemptIdInStateStore
+          > app.maxAppAttempts) {
+        // attempts' first element is oldest attempt because it is a
+        // LinkedHashMap
+        ApplicationAttemptId attemptId = ApplicationAttemptId.newInstance(
+            app.getApplicationId(), app.firstAttemptIdInStateStore);
+        app.firstAttemptIdInStateStore++;
+        LOG.info("Remove attempt from state store : " + attemptId);
+        app.rmContext.getStateStore().removeApplicationAttempt(attemptId);
       }
     }
   }
@@ -1382,7 +1434,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         || appState == RMAppState.KILLED;
   }
   
-  private RMAppState getRecoveredFinalState() {
+  public RMAppState getRecoveredFinalState() {
     return this.recoveredFinalState;
   }
 
@@ -1721,5 +1773,25 @@ public class RMAppImpl implements RMApp, Recoverable {
           ? NodeLabel.DEFAULT_NODE_LABEL_PARTITION : amNodeLabelExpression;
     }
     return amNodeLabelExpression;
+  }
+  
+  @Override
+  public CallerContext getCallerContext() {
+    return callerContext;
+  }
+
+  private void sendATSCreateEvent(RMApp app, long startTime) {
+    rmContext.getRMApplicationHistoryWriter().applicationStarted(app);
+    rmContext.getSystemMetricsPublisher().appCreated(app, startTime);
+  }
+
+  @VisibleForTesting
+  public boolean isAmBlacklistingEnabled() {
+    return amBlacklistingEnabled;
+  }
+
+  @VisibleForTesting
+  public float getAmBlacklistingDisableThreshold() {
+    return blacklistDisableThreshold;
   }
 }

@@ -142,6 +142,19 @@ public class MemoryRMStateStore extends RMStateStore {
   }
 
   @Override
+  public synchronized void removeApplicationAttemptInternal(
+      ApplicationAttemptId appAttemptId) throws Exception {
+    ApplicationStateData appState =
+        state.getApplicationState().get(appAttemptId.getApplicationId());
+    ApplicationAttemptStateData attemptState =
+        appState.attempts.remove(appAttemptId);
+    LOG.info("Removing state for attempt: " + appAttemptId);
+    if (attemptState == null) {
+      throw new YarnRuntimeException("Application doesn't exist");
+    }
+  }
+
+  @Override
   public synchronized void removeApplicationStateInternal(
       ApplicationStateData appState) throws Exception {
     ApplicationId appId =
@@ -237,23 +250,6 @@ public class MemoryRMStateStore extends RMStateStore {
     if (planState == null) {
       planState = new HashMap<>();
       state.getReservationState().put(planName, planState);
-    }
-    ReservationId reservationId =
-        ReservationId.parseReservationId(reservationIdName);
-    planState.put(reservationId, reservationAllocation);
-  }
-
-  @Override
-  protected synchronized void updateReservationState(
-      ReservationAllocationStateProto reservationAllocation, String planName,
-      String reservationIdName) throws Exception {
-    LOG.info("Updating reservationallocation for " + reservationIdName + " " +
-            "for plan " + planName);
-    Map<ReservationId, ReservationAllocationStateProto> planState =
-        state.getReservationState().get(planName);
-    if (planState == null) {
-      throw new YarnRuntimeException("State for plan " + planName + " does " +
-          "not exist");
     }
     ReservationId reservationId =
         ReservationId.parseReservationId(reservationIdName);

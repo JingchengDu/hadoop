@@ -99,7 +99,7 @@ public class ContainerImpl implements Container {
   private boolean wasLaunched;
   private long containerLocalizationStartTime;
   private long containerLaunchStartTime;
-  private static Clock clock = new SystemClock();
+  private static Clock clock = SystemClock.getInstance();
 
   /** The NM-wide configuration - not specific to this container */
   private final Configuration daemonConf;
@@ -1041,7 +1041,12 @@ public class ContainerImpl implements Container {
       ContainerDoneTransition {
     @Override
     public void transition(ContainerImpl container, ContainerEvent event) {
-      container.metrics.endRunningContainer();
+      if (container.wasLaunched) {
+        container.metrics.endRunningContainer();
+      } else {
+        LOG.warn("Container exited with success despite being killed and not" +
+            "actually running");
+      }
       container.metrics.completedContainer();
       NMAuditLogger.logSuccess(container.user,
           AuditConstants.FINISH_SUCCESS_CONTAINER, "ContainerImpl",

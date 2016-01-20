@@ -103,7 +103,8 @@ public class ApplicationHistoryServer extends CompositeService {
 
     DefaultMetricsSystem.initialize("ApplicationHistoryServer");
     JvmMetrics jm = JvmMetrics.initSingleton("ApplicationHistoryServer", null);
-    pauseMonitor = new JvmPauseMonitor(conf);
+    pauseMonitor = new JvmPauseMonitor();
+    addService(pauseMonitor);
     jm.setPauseMonitor(pauseMonitor);
     super.serviceInit(conf);
   }
@@ -116,9 +117,6 @@ public class ApplicationHistoryServer extends CompositeService {
       throw new YarnRuntimeException("Failed to login", ie);
     }
 
-    if (pauseMonitor != null) {
-      pauseMonitor.start();
-    }
     super.serviceStart();
     startWebApp();
   }
@@ -127,9 +125,6 @@ public class ApplicationHistoryServer extends CompositeService {
   protected void serviceStop() throws Exception {
     if (webApp != null) {
       webApp.stop();
-    }
-    if (pauseMonitor != null) {
-      pauseMonitor.stop();
     }
     DefaultMetricsSystem.shutdown();
     super.serviceStop();
@@ -141,10 +136,14 @@ public class ApplicationHistoryServer extends CompositeService {
     return this.ahsClientService;
   }
 
+  private InetSocketAddress getListenerAddress() {
+    return this.webApp.httpServer().getConnectorAddress(0);
+  }
+
   @Private
   @VisibleForTesting
   public int getPort() {
-    return this.webApp.httpServer().getConnectorAddress(0).getPort();
+    return this.getListenerAddress().getPort();
   }
 
   /**
@@ -229,8 +228,9 @@ public class ApplicationHistoryServer extends CompositeService {
   }
 
   private TimelineDataManager createTimelineDataManager(Configuration conf) {
-    return new TimelineDataManager(
-        timelineStore, new TimelineACLsManager(conf));
+    TimelineACLsManager aclsMgr = new TimelineACLsManager(conf);
+    aclsMgr.setTimelineStore(timelineStore);
+    return new TimelineDataManager(timelineStore, aclsMgr);
   }
 
   @SuppressWarnings("unchecked")
@@ -331,6 +331,10 @@ public class ApplicationHistoryServer extends CompositeService {
          httpServer.addContext(uiWebAppContext, true);
        }
        httpServer.start();
+       conf.updateConnectAddr(YarnConfiguration.TIMELINE_SERVICE_BIND_HOST,
+         YarnConfiguration.TIMELINE_SERVICE_WEBAPP_ADDRESS,
+         YarnConfiguration.DEFAULT_TIMELINE_SERVICE_WEBAPP_ADDRESS,
+         this.getListenerAddress());
        LOG.info("Instantiating AHSWebApp at " + getPort());
     } catch (Exception e) {
       String msg = "AHSWebApp failed to start.";

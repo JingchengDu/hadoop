@@ -89,6 +89,11 @@ public class TestINodeFile {
   private short replication;
   private long preferredBlockSize = 1024;
 
+  static public INodeFile createINodeFile(long id) {
+    return new INodeFile(id, ("file" + id).getBytes(), perm, 0L, 0L, null,
+        (short)3, 1024L);
+  }
+
   INodeFile createINodeFile(short replication, long preferredBlockSize) {
     return new INodeFile(HdfsConstants.GRANDFATHER_INODE_ID, null, perm, 0L, 0L,
         null, replication, preferredBlockSize);
@@ -485,7 +490,7 @@ public class TestINodeFile {
       // Apply editlogs to fsimage, ensure inodeUnderConstruction is handled
       fsn.enterSafeMode(false);
       fsn.saveNamespace(0, 0);
-      fsn.leaveSafeMode();
+      fsn.leaveSafeMode(false);
 
       outStream.close();
 

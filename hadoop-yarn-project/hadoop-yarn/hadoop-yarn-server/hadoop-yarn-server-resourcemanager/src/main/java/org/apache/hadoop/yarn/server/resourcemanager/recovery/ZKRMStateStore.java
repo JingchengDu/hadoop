@@ -659,6 +659,22 @@ public class ZKRMStateStore extends RMStateStore {
   }
 
   @Override
+  public synchronized void removeApplicationAttemptInternal(
+      ApplicationAttemptId appAttemptId)
+      throws Exception {
+    String appId = appAttemptId.getApplicationId().toString();
+    String appIdRemovePath = getNodePath(rmAppRoot, appId);
+    String attemptIdRemovePath = getNodePath(appIdRemovePath,
+        appAttemptId.toString());
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Removing info for attempt: " + appAttemptId + " at: "
+          + attemptIdRemovePath);
+    }
+    safeDelete(attemptIdRemovePath);
+  }
+
+  @Override
   public synchronized void removeApplicationStateInternal(
       ApplicationStateData  appState)
       throws Exception {
@@ -842,17 +858,6 @@ public class ZKRMStateStore extends RMStateStore {
     SafeTransaction trx = new SafeTransaction();
     addOrUpdateReservationState(
         reservationAllocation, planName, reservationIdName, trx, false);
-    trx.commit();
-  }
-
-  @Override
-  protected synchronized void updateReservationState(
-      ReservationAllocationStateProto reservationAllocation, String planName,
-      String reservationIdName)
-      throws Exception {
-    SafeTransaction trx = new SafeTransaction();
-    addOrUpdateReservationState(
-        reservationAllocation, planName, reservationIdName, trx, true);
     trx.commit();
   }
 

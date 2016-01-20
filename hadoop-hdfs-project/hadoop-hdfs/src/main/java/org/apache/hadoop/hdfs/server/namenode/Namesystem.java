@@ -22,7 +22,6 @@ import java.io.IOException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockCollection;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
@@ -48,9 +47,9 @@ public interface Namesystem extends RwLock, SafeMode {
 
   BlockCollection getBlockCollection(long id);
 
-  void adjustSafeModeBlockTotals(int deltaSafe, int deltaTotal);
-
   void checkOperation(OperationCategory read) throws StandbyException;
+
+  void startSecretManagerIfNecessary();
 
   /**
    * Gets the erasure coding policy for the path
@@ -62,9 +61,20 @@ public interface Namesystem extends RwLock, SafeMode {
   ErasureCodingPolicy getErasureCodingPolicyForPath(String src)
       throws IOException;
 
-  boolean isInSnapshot(BlockInfo blockUC);
+  boolean isInSnapshot(long blockCollectionID);
 
   CacheManager getCacheManager();
 
   HAContext getHAContext();
+
+  /**
+   * @return true if the HA is enabled else false
+   */
+  boolean isHaEnabled();
+
+  /**
+   * @return Whether the namenode is transitioning to active state and is in the
+   *         middle of the starting active services.
+   */
+  boolean inTransitionToActive();
 }

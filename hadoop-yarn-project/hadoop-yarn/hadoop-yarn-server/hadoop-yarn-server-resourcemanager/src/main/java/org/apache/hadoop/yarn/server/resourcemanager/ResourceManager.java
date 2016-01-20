@@ -157,6 +157,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   private AppReportFetcher fetcher = null;
   protected ResourceTrackerService resourceTracker;
   private JvmPauseMonitor pauseMonitor;
+  private boolean curatorEnabled = false;
 
   @VisibleForTesting
   protected String webAppAddress;
@@ -228,6 +229,13 @@ public class ResourceManager extends CompositeService implements Recoverable {
     this.rmContext.setHAEnabled(HAUtil.isHAEnabled(this.conf));
     if (this.rmContext.isHAEnabled()) {
       HAUtil.verifyAndSetConfiguration(this.conf);
+      curatorEnabled = conf.getBoolean(YarnConfiguration.CURATOR_LEADER_ELECTOR,
+          YarnConfiguration.DEFAULT_CURATOR_LEADER_ELECTOR_ENABLED);
+      if (curatorEnabled) {
+        LeaderElectorService elector = new LeaderElectorService(rmContext);
+        addService(elector);
+        rmContext.setLeaderElectorService(elector);
+      }
     }
     
     // Set UGI and do login
@@ -518,7 +526,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
 
       DefaultMetricsSystem.initialize("ResourceManager");
       JvmMetrics jm = JvmMetrics.initSingleton("ResourceManager", null);
-      pauseMonitor = new JvmPauseMonitor(conf);
+      pauseMonitor = new JvmPauseMonitor();
+      addService(pauseMonitor);
       jm.setPauseMonitor(pauseMonitor);
 
       // Initialize the Reservation system
@@ -574,8 +583,6 @@ public class ResourceManager extends CompositeService implements Recoverable {
       // need events to move to further states.
       rmStore.start();
 
-      pauseMonitor.start();
-
       if(recoveryEnabled) {
         try {
           LOG.info("Recovery started");
@@ -601,10 +608,6 @@ public class ResourceManager extends CompositeService implements Recoverable {
     protected void serviceStop() throws Exception {
 
       super.serviceStop();
-
-      if (pauseMonitor != null) {
-        pauseMonitor.stop();
-      }
 
       DefaultMetricsSystem.shutdown();
       if (rmContext != null) {
@@ -764,7 +767,11 @@ public class ResourceManager extends CompositeService implements Recoverable {
         // Transition to standby and reinit active services
         LOG.info("Transitioning RM to Standby mode");
         transitionToStandby(true);
-        adminService.resetLeaderElection();
+        if (curatorEnabled) {
+          rmContext.getLeaderElectorService().reJoinElection();
+        } else {
+          adminService.resetLeaderElection();
+        }
         return;
       } catch (Exception e) {
         LOG.fatal("Failed to transition RM to Standby mode.");
@@ -821,6 +828,33 @@ public class ResourceManager extends CompositeService implements Recoverable {
           } catch (Throwable t) {
             LOG.error("Error in handling event type " + event.getType()
                 + " for applicationAttempt " + appAttemptId, t);
+          }
+        } else if (rmApp.getApplicationSubmissionContext() != null
+            && rmApp.getApplicationSubmissionContext()
+            .getKeepContainersAcrossApplicationAttempts()
+            && event.getType() == RMAppAttemptEventType.CONTAINER_FINISHED) {
+          // For work-preserving AM restart, failed attempts are still
+          // capturing CONTAINER_FINISHED events and record the finished
+          // containers which will be used by current attempt.
+          // We just keep 'yarn.resourcemanager.am.max-attempts' in
+          // RMStateStore. If the finished container's attempt is deleted, we
+          // use the first attempt in app.attempts to deal with these events.
+
+          RMAppAttempt previousFailedAttempt =
+              rmApp.getAppAttempts().values().iterator().next();
+          if (previousFailedAttempt != null) {
+            try {
+              LOG.debug("Event " + event.getType() + " handled by "
+                  + previousFailedAttempt);
+              previousFailedAttempt.handle(event);
+            } catch (Throwable t) {
+              LOG.error("Error in handling event type " + event.getType()
+                  + " for applicationAttempt " + appAttemptId
+                  + " with " + previousFailedAttempt, t);
+            }
+          } else {
+            LOG.error("Event " + event.getType()
+                + " not handled, because previousFailedAttempt is null");
           }
         }
       }
@@ -972,9 +1006,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
   /**
    * Helper method to create and init {@link #activeServices}. This creates an
    * instance of {@link RMActiveServices} and initializes it.
-   * @throws Exception
    */
-  protected void createAndInitActiveServices() throws Exception {
+  protected void createAndInitActiveServices() {
     activeServices = new RMActiveServices(this);
     activeServices.init(conf);
   }
@@ -994,14 +1027,14 @@ public class ResourceManager extends CompositeService implements Recoverable {
    * Helper method to stop {@link #activeServices}.
    * @throws Exception
    */
-  void stopActiveServices() throws Exception {
+  void stopActiveServices() {
     if (activeServices != null) {
       activeServices.stop();
       activeServices = null;
     }
   }
 
-  void reinitialize(boolean initialize) throws Exception {
+  void reinitialize(boolean initialize) {
     ClusterMetrics.destroy();
     QueueMetrics.clearQueueMetrics();
     if (initialize) {
@@ -1020,7 +1053,6 @@ public class ResourceManager extends CompositeService implements Recoverable {
       LOG.info("Already in active state");
       return;
     }
-
     LOG.info("Transitioning to active state");
 
     this.rmLoginUGI.doAs(new PrivilegedExceptionAction<Void>() {
@@ -1061,7 +1093,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   @Override
   protected void serviceStart() throws Exception {
     if (this.rmContext.isHAEnabled()) {
-      transitionToStandby(true);
+      transitionToStandby(false);
     } else {
       transitionToActive();
     }
@@ -1316,4 +1348,5 @@ public class ResourceManager extends CompositeService implements Recoverable {
     out.println("                            "
         + "[-remove-application-from-state-store <appId>]" + "\n");
   }
+
 }

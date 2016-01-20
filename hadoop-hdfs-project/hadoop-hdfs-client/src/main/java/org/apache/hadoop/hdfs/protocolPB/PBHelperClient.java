@@ -162,13 +162,13 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm.ShmId;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm.SlotId;
-import org.apache.hadoop.hdfs.util.ExactSizeInputStream;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.erasurecode.ECSchema;
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.hadoop.util.LimitInputStream;
 
 /**
  * Utilities for converting protobuf classes to and from hdfs-client side
@@ -194,7 +194,8 @@ public class PBHelperClient {
   }
 
   public static ByteString getByteString(byte[] bytes) {
-    return ByteString.copyFrom(bytes);
+    // return singleton to reduce object allocation
+    return (bytes.length == 0) ? ByteString.EMPTY : ByteString.copyFrom(bytes);
   }
 
   public static ShmId convert(ShortCircuitShmIdProto shmId) {
@@ -221,8 +222,8 @@ public class PBHelperClient {
 
   public static TokenProto convert(Token<?> tok) {
     return TokenProto.newBuilder().
-        setIdentifier(ByteString.copyFrom(tok.getIdentifier())).
-        setPassword(ByteString.copyFrom(tok.getPassword())).
+        setIdentifier(getByteString(tok.getIdentifier())).
+        setPassword(getByteString(tok.getPassword())).
         setKind(tok.getKind().toString()).
         setService(tok.getService().toString()).build();
   }
@@ -401,7 +402,7 @@ public class PBHelperClient {
 
     int size = CodedInputStream.readRawVarint32(firstByte, input);
     assert size >= 0;
-    return new ExactSizeInputStream(input, size);
+    return new LimitInputStream(input, size);
   }
 
   public static CipherOption convert(HdfsProtos.CipherOptionProto proto) {
@@ -451,16 +452,16 @@ public class PBHelperClient {
         builder.setSuite(convert(option.getCipherSuite()));
       }
       if (option.getInKey() != null) {
-        builder.setInKey(ByteString.copyFrom(option.getInKey()));
+        builder.setInKey(getByteString(option.getInKey()));
       }
       if (option.getInIv() != null) {
-        builder.setInIv(ByteString.copyFrom(option.getInIv()));
+        builder.setInIv(getByteString(option.getInIv()));
       }
       if (option.getOutKey() != null) {
-        builder.setOutKey(ByteString.copyFrom(option.getOutKey()));
+        builder.setOutKey(getByteString(option.getOutKey()));
       }
       if (option.getOutIv() != null) {
-        builder.setOutIv(ByteString.copyFrom(option.getOutIv()));
+        builder.setOutIv(getByteString(option.getOutIv()));
       }
       return builder.build();
     }
@@ -525,13 +526,9 @@ public class PBHelperClient {
           .toArray(new String[storageIDsCount]);
     }
 
-    int[] indices = null;
-    final int indexCount = proto.getBlockIndexCount();
-    if (indexCount > 0) {
-      indices = new int[indexCount];
-      for (int i = 0; i < indexCount; i++) {
-        indices[i] = proto.getBlockIndex(i);
-      }
+    byte[] indices = null;
+    if (proto.hasBlockIndices()) {
+      indices = proto.getBlockIndices().toByteArray();
     }
 
     // Set values from the isCached list, re-using references from loc
@@ -813,10 +810,10 @@ public class PBHelperClient {
     }
     if (b instanceof LocatedStripedBlock) {
       LocatedStripedBlock sb = (LocatedStripedBlock) b;
-      int[] indices = sb.getBlockIndices();
+      byte[] indices = sb.getBlockIndices();
+      builder.setBlockIndices(PBHelperClient.getByteString(indices));
       Token<BlockTokenIdentifier>[] blockTokens = sb.getBlockTokens();
       for (int i = 0; i < indices.length; i++) {
-        builder.addBlockIndex(indices[i]);
         builder.addBlockTokens(PBHelperClient.convert(blockTokens[i]));
       }
     }
@@ -1738,8 +1735,8 @@ public class PBHelperClient {
     DataEncryptionKeyProto.Builder b = DataEncryptionKeyProto.newBuilder()
         .setKeyId(bet.keyId)
         .setBlockPoolId(bet.blockPoolId)
-        .setNonce(ByteString.copyFrom(bet.nonce))
-        .setEncryptionKey(ByteString.copyFrom(bet.encryptionKey))
+        .setNonce(getByteString(bet.nonce))
+        .setEncryptionKey(getByteString(bet.encryptionKey))
         .setExpiryDate(bet.expiryDate);
     if (bet.encryptionAlgorithm != null) {
       b.setEncryptionAlgorithm(bet.encryptionAlgorithm);
@@ -1816,10 +1813,10 @@ public class PBHelperClient {
             setGroup(fs.getGroup()).
             setFileId(fs.getFileId()).
             setChildrenNum(fs.getChildrenNum()).
-            setPath(ByteString.copyFrom(fs.getLocalNameInBytes())).
+            setPath(getByteString(fs.getLocalNameInBytes())).
             setStoragePolicy(fs.getStoragePolicy());
     if (fs.isSymlink())  {
-      builder.setSymlink(ByteString.copyFrom(fs.getSymlinkInBytes()));
+      builder.setSymlink(getByteString(fs.getSymlinkInBytes()));
     }
     if (fs.getFileEncryptionInfo() != null) {
       builder.setFileEncryptionInfo(convert(fs.getFileEncryptionInfo()));
@@ -1846,7 +1843,7 @@ public class PBHelperClient {
     int snapshotNumber = status.getSnapshotNumber();
     int snapshotQuota = status.getSnapshotQuota();
     byte[] parentFullPath = status.getParentFullPath();
-    ByteString parentFullPathBytes = ByteString.copyFrom(
+    ByteString parentFullPathBytes = getByteString(
         parentFullPath == null ? DFSUtilClient.EMPTY_BYTES : parentFullPath);
     HdfsFileStatusProto fs = convert(status.getDirStatus());
     SnapshottableDirectoryStatusProto.Builder builder =
@@ -2061,7 +2058,7 @@ public class PBHelperClient {
     if (entry == null) {
       return null;
     }
-    ByteString sourcePath = ByteString.copyFrom(entry.getSourcePath() == null ?
+    ByteString sourcePath = getByteString(entry.getSourcePath() == null ?
         DFSUtilClient.EMPTY_BYTES : entry.getSourcePath());
     String modification = entry.getType().getLabel();
     SnapshotDiffReportEntryProto.Builder builder = SnapshotDiffReportEntryProto
@@ -2069,7 +2066,7 @@ public class PBHelperClient {
         .setModificationLabel(modification);
     if (entry.getType() == DiffType.RENAME) {
       ByteString targetPath =
-          ByteString.copyFrom(entry.getTargetPath() == null ?
+          getByteString(entry.getTargetPath() == null ?
               DFSUtilClient.EMPTY_BYTES : entry.getTargetPath());
       builder.setTargetPath(targetPath);
     }

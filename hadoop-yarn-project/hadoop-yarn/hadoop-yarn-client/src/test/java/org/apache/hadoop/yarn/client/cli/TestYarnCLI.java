@@ -46,6 +46,7 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang.time.DateFormatUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptReport;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -64,13 +65,20 @@ import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueState;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.ResourceUtilization;
 import org.apache.hadoop.yarn.api.records.SignalContainerCommand;
 import org.apache.hadoop.yarn.api.records.YarnApplicationAttemptState;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.YarnClient;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
 import org.apache.hadoop.yarn.exceptions.ContainerNotFoundException;
+import org.apache.hadoop.yarn.server.MiniYARNCluster;
+import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystemTestUtil;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.util.Records;
 import org.junit.Assert;
 import org.junit.Before;
@@ -985,6 +993,35 @@ public class TestYarnCLI {
     verify(sysOut, times(3)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
+    result = cli.run(new String[] { "-list", "-showDetails" });
+    assertEquals(0, result);
+    baos = new ByteArrayOutputStream();
+    pw = new PrintWriter(baos);
+    pw.println("Total Nodes:2");
+    pw.print("         Node-Id\t     Node-State\tNode-Http-Address\t");
+    pw.println("Number-of-Running-Containers");
+    pw.print("         host0:0\t        RUNNING\t       host1:8888\t");
+    pw.println("                           0");
+    pw.println("Detailed Node Information :");
+    pw.println("\tConfigured Resources : <memory:0, vCores:0>");
+    pw.println("\tAllocated Resources : <memory:0, vCores:0>");
+    pw.println("\tResource Utilization by Node : PMem:2048 MB, VMem:4096 MB, VCores:8.0");
+    pw.println("\tResource Utilization by Containers : PMem:1024 MB, VMem:2048 MB, VCores:4.0");
+    pw.println("\tNode-Labels : ");
+    pw.print("         host1:0\t        RUNNING\t       host1:8888\t");
+    pw.println("                           0");
+    pw.println("Detailed Node Information :");
+    pw.println("\tConfigured Resources : <memory:0, vCores:0>");
+    pw.println("\tAllocated Resources : <memory:0, vCores:0>");
+    pw.println("\tResource Utilization by Node : PMem:2048 MB, VMem:4096 MB, VCores:8.0");
+    pw.println("\tResource Utilization by Containers : PMem:1024 MB, VMem:2048 MB, VCores:4.0");
+    pw.println("\tNode-Labels : ");
+    pw.close();
+    nodesReportStr = baos.toString("UTF-8");
+    Assert.assertEquals(nodesReportStr, sysOutStream.toString());
+    verify(sysOut, times(4)).write(any(byte[].class), anyInt(), anyInt());
+
+    sysOutStream.reset();
     nodeStates.clear();
     nodeStates.add(NodeState.UNHEALTHY);
     states = nodeStates.toArray(new NodeState[0]);
@@ -1003,7 +1040,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(4)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(5)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
     nodeStates.clear();
@@ -1024,7 +1061,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(5)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(6)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
     nodeStates.clear();
@@ -1045,7 +1082,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(6)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(7)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
     nodeStates.clear();
@@ -1066,7 +1103,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(7)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(8)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
     nodeStates.clear();
@@ -1099,7 +1136,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(8)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(9)).write(any(byte[].class), anyInt(), anyInt());
 
     sysOutStream.reset();
     nodeStates.clear();
@@ -1134,7 +1171,7 @@ public class TestYarnCLI {
     pw.close();
     nodesReportStr = baos.toString("UTF-8");
     Assert.assertEquals(nodesReportStr, sysOutStream.toString());
-    verify(sysOut, times(9)).write(any(byte[].class), anyInt(), anyInt());
+    verify(sysOut, times(10)).write(any(byte[].class), anyInt(), anyInt());
   }
 
   private List<NodeReport> getNodeReports(
@@ -1178,6 +1215,8 @@ public class TestYarnCLI {
     pw.println("\tCPU-Used : 0 vcores");
     pw.println("\tCPU-Capacity : 0 vcores");
     pw.println("\tNode-Labels : a,b,c,x,y,z");
+    pw.println("\tResource Utilization by Node : PMem:2048 MB, VMem:4096 MB, VCores:8.0");
+    pw.println("\tResource Utilization by Containers : PMem:1024 MB, VMem:2048 MB, VCores:4.0");
     pw.close();
     String nodeStatusStr = baos.toString("UTF-8");
     verify(sysOut, times(1)).println(isA(String.class));
@@ -1212,6 +1251,44 @@ public class TestYarnCLI {
     pw.println("\tCPU-Used : 0 vcores");
     pw.println("\tCPU-Capacity : 0 vcores");
     pw.println("\tNode-Labels : ");
+    pw.println("\tResource Utilization by Node : PMem:2048 MB, VMem:4096 MB, VCores:8.0");
+    pw.println("\tResource Utilization by Containers : PMem:1024 MB, VMem:2048 MB, VCores:4.0");
+    pw.close();
+    String nodeStatusStr = baos.toString("UTF-8");
+    verify(sysOut, times(1)).println(isA(String.class));
+    verify(sysOut).println(nodeStatusStr);
+  }
+
+  @Test
+  public void testNodeStatusWithEmptyResourceUtilization() throws Exception {
+    NodeId nodeId = NodeId.newInstance("host0", 0);
+    NodeCLI cli = new NodeCLI();
+    when(client.getNodeReports()).thenReturn(
+                    getNodeReports(3, NodeState.RUNNING, false, true));
+    cli.setClient(client);
+    cli.setSysOutPrintStream(sysOut);
+    cli.setSysErrPrintStream(sysErr);
+    int result = cli.run(new String[] { "-status", nodeId.toString() });
+    assertEquals(0, result);
+    verify(client).getNodeReports();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    PrintWriter pw = new PrintWriter(baos);
+    pw.println("Node Report : ");
+    pw.println("\tNode-Id : host0:0");
+    pw.println("\tRack : rack1");
+    pw.println("\tNode-State : RUNNING");
+    pw.println("\tNode-Http-Address : host1:8888");
+    pw.println("\tLast-Health-Update : "
+      + DateFormatUtils.format(new Date(0), "E dd/MMM/yy hh:mm:ss:SSzz"));
+    pw.println("\tHealth-Report : ");
+    pw.println("\tContainers : 0");
+    pw.println("\tMemory-Used : 0MB");
+    pw.println("\tMemory-Capacity : 0MB");
+    pw.println("\tCPU-Used : 0 vcores");
+    pw.println("\tCPU-Capacity : 0 vcores");
+    pw.println("\tNode-Labels : a,b,c,x,y,z");
+    pw.println("\tResource Utilization by Node : ");
+    pw.println("\tResource Utilization by Containers : ");
     pw.close();
     String nodeStatusStr = baos.toString("UTF-8");
     verify(sysOut, times(1)).println(isA(String.class));
@@ -1283,7 +1360,7 @@ public class TestYarnCLI {
     nodeLabels.add("GPU");
     nodeLabels.add("JDK_7");
     QueueInfo queueInfo = QueueInfo.newInstance("queueA", 0.4f, 0.8f, 0.5f,
-        null, null, QueueState.RUNNING, nodeLabels, "GPU", null);
+        null, null, QueueState.RUNNING, nodeLabels, "GPU", null, false);
     when(client.getQueueInfo(any(String.class))).thenReturn(queueInfo);
     int result = cli.run(new String[] { "-status", "queueA" });
     assertEquals(0, result);
@@ -1298,16 +1375,103 @@ public class TestYarnCLI {
     pw.println("\tMaximum Capacity : " + "80.0%");
     pw.println("\tDefault Node Label expression : " + "GPU");
     pw.println("\tAccessible Node Labels : " + "JDK_7,GPU");
+    pw.println("\tPreemption : " + "enabled");
     pw.close();
     String queueInfoStr = baos.toString("UTF-8");
     Assert.assertEquals(queueInfoStr, sysOutStream.toString());
+  }
+
+  @Test
+  public void testGetQueueInfoPreemptionEnabled() throws Exception {
+    CapacitySchedulerConfiguration conf = new CapacitySchedulerConfiguration();
+    ReservationSystemTestUtil.setupQueueConfiguration(conf);
+    conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
+        ResourceScheduler.class);
+    conf.setBoolean(YarnConfiguration.RM_SCHEDULER_ENABLE_MONITORS, true);
+    conf.set(YarnConfiguration.RM_SCHEDULER_MONITOR_POLICIES,
+        "org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity."
+        + "ProportionalCapacityPreemptionPolicy");
+    conf.setBoolean(YarnConfiguration.RM_SCHEDULER_ENABLE_MONITORS, true);
+    MiniYARNCluster cluster =
+        new MiniYARNCluster("testReservationAPIs", 2, 1, 1);
+
+    YarnClient yarnClient = null;
+    try {
+      cluster.init(conf);
+      cluster.start();
+      final Configuration yarnConf = cluster.getConfig();
+      yarnClient = YarnClient.createYarnClient();
+      yarnClient.init(yarnConf);
+      yarnClient.start();
+
+      QueueCLI cli = new QueueCLI();
+      cli.setClient(yarnClient);
+      cli.setSysOutPrintStream(sysOut);
+      cli.setSysErrPrintStream(sysErr);
+      sysOutStream.reset();
+      int result = cli.run(new String[] { "-status", "a1" });
+      assertEquals(0, result);
+      Assert.assertTrue(sysOutStream.toString()
+          .contains("Preemption : enabled"));
+    } finally {
+      // clean-up
+      if (yarnClient != null) {
+        yarnClient.stop();
+      }
+      cluster.stop();
+      cluster.close();
+    }
+  }
+
+  @Test
+  public void testGetQueueInfoPreemptionDisabled() throws Exception {
+    CapacitySchedulerConfiguration conf = new CapacitySchedulerConfiguration();
+    ReservationSystemTestUtil.setupQueueConfiguration(conf);
+    conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
+        ResourceScheduler.class);
+    conf.setBoolean(YarnConfiguration.RM_SCHEDULER_ENABLE_MONITORS, true);
+    conf.set(YarnConfiguration.RM_SCHEDULER_MONITOR_POLICIES,
+        "org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity."
+        + "ProportionalCapacityPreemptionPolicy");
+    conf.setBoolean(YarnConfiguration.RM_SCHEDULER_ENABLE_MONITORS, true);
+    conf.setBoolean(
+        "yarn.scheduler.capacity.root.a.a1.disable_preemption", true);
+    MiniYARNCluster cluster =
+        new MiniYARNCluster("testReservationAPIs", 2, 1, 1);
+
+    YarnClient yarnClient = null;
+    try {
+      cluster.init(conf);
+      cluster.start();
+      final Configuration yarnConf = cluster.getConfig();
+      yarnClient = YarnClient.createYarnClient();
+      yarnClient.init(yarnConf);
+      yarnClient.start();
+
+      QueueCLI cli = new QueueCLI();
+      cli.setClient(yarnClient);
+      cli.setSysOutPrintStream(sysOut);
+      cli.setSysErrPrintStream(sysErr);
+      sysOutStream.reset();
+      int result = cli.run(new String[] { "-status", "a1" });
+      assertEquals(0, result);
+      Assert.assertTrue(sysOutStream.toString()
+          .contains("Preemption : disabled"));
+    } finally {
+      // clean-up
+      if (yarnClient != null) {
+        yarnClient.stop();
+      }
+      cluster.stop();
+      cluster.close();
+    }
   }
   
   @Test
   public void testGetQueueInfoWithEmptyNodeLabel() throws Exception {
     QueueCLI cli = createAndGetQueueCLI();
     QueueInfo queueInfo = QueueInfo.newInstance("queueA", 0.4f, 0.8f, 0.5f,
-        null, null, QueueState.RUNNING, null, null, null);
+        null, null, QueueState.RUNNING, null, null, null, true);
     when(client.getQueueInfo(any(String.class))).thenReturn(queueInfo);
     int result = cli.run(new String[] { "-status", "queueA" });
     assertEquals(0, result);
@@ -1323,6 +1487,7 @@ public class TestYarnCLI {
     pw.println("\tDefault Node Label expression : "
         + NodeLabel.DEFAULT_NODE_LABEL_PARTITION);
     pw.println("\tAccessible Node Labels : ");
+    pw.println("\tPreemption : " + "disabled");
     pw.close();
     String queueInfoStr = baos.toString("UTF-8");
     Assert.assertEquals(queueInfoStr, sysOutStream.toString());
@@ -1463,11 +1628,16 @@ public class TestYarnCLI {
   }
   
   private List<NodeReport> getNodeReports(int noOfNodes, NodeState state) {
-    return getNodeReports(noOfNodes, state, true);
+    return getNodeReports(noOfNodes, state, true, false);
   }
 
   private List<NodeReport> getNodeReports(int noOfNodes, NodeState state,
       boolean emptyNodeLabel) {
+    return getNodeReports(noOfNodes, state, emptyNodeLabel, false);
+  }
+
+  private List<NodeReport> getNodeReports(int noOfNodes, NodeState state,
+      boolean emptyNodeLabel, boolean emptyResourceUtilization) {
     List<NodeReport> nodeReports = new ArrayList<NodeReport>();
 
     for (int i = 0; i < noOfNodes; i++) {
@@ -1481,6 +1651,14 @@ public class TestYarnCLI {
         .newInstance("host" + i, 0), state, "host" + 1 + ":8888",
           "rack1", Records.newRecord(Resource.class), Records
               .newRecord(Resource.class), 0, "", 0, nodeLabels);
+      if (!emptyResourceUtilization) {
+        ResourceUtilization containersUtilization = ResourceUtilization
+            .newInstance(1024, 2048, 4);
+        ResourceUtilization nodeUtilization = ResourceUtilization.newInstance(
+            2048, 4096, 8);
+        nodeReport.setAggregatedContainersUtilization(containersUtilization);
+        nodeReport.setNodeUtilization(nodeUtilization);
+      }
       nodeReports.add(nodeReport);
     }
     return nodeReports;
@@ -1578,7 +1756,9 @@ public class TestYarnCLI {
     pw.println(" -help              Displays help for all commands.");
     pw.println(" -list              List all running nodes. Supports optional use of");
     pw.println("                    -states to filter nodes based on node state, all -all");
-    pw.println("                    to list all nodes.");
+    pw.println("                    to list all nodes, -showDetails to display more");
+    pw.println("                    details about each node.");
+    pw.println(" -showDetails       Works with -list to show more details about each node.");
     pw.println(" -states <States>   Works with -list to filter nodes based on input");
     pw.println("                    comma-separated list of node states.");
     pw.println(" -status <NodeId>   Prints the status report of the node.");
