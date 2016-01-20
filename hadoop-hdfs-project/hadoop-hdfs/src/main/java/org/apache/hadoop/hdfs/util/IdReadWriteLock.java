@@ -57,10 +57,10 @@ public class IdReadWriteLock {
           }, NB_CONCURRENT_LOCKS);
   
   EvictThread evitThread = new EvictThread();
-  private int threshold = 1000;
+  private int threshold = 100;
 
   public IdReadWriteLock(Configuration conf) {
-    threshold = conf.getInt("receiver.lockpool.threshold", 1000);
+    threshold = conf.getInt("receiver.lockpool.threshold", threshold);
     evitThread.start();
   }
   

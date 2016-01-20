@@ -64,8 +64,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     Block corruptBlock = null;
     ReplicaInfo memBlockInfo;
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       synchronized (this) {
         memBlockInfo = volumeMap.get(bpid, blockId);
         if (memBlockInfo != null && memBlockInfo.getState() != ReplicaState.FINALIZED) {
@@ -217,8 +217,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   @Override
   public Block getStoredBlock(String bpid, long blkid) throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(blkid);
+    lock.readLock().lock();
     try {
-      lock.readLock().lock();
       File blockfile = getFile(bpid, blkid, false);
       if (blockfile == null) {
         return null;
@@ -235,8 +235,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   public ReplicaInputStreams getTmpInputStreams(ExtendedBlock b, long blkOffset, long metaOffset)
     throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.readLock().lock();
     try {
-      lock.readLock().lock();
       ReplicaInfo info = getReplicaInfo(b);
       FsVolumeReference ref = info.getVolume().obtainReference();
       try {
@@ -265,8 +265,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     ReplicaInfo lastFoundReplicaInfo = null;
     do {
       ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+      lock.writeLock().lock();
       try {
-        lock.writeLock().lock();
         ReplicaInfo currentReplicaInfo =
           volumeMap.get(b.getBlockPoolId(), b.getBlockId());
       if (currentReplicaInfo == lastFoundReplicaInfo) {
@@ -323,8 +323,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   public ReplicaHandler createRbw(StorageType storageType, ExtendedBlock b, boolean allowLazyPersist)
     throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(), b.getBlockId());
       if (replicaInfo != null) {
         throw new ReplicaAlreadyExistsException("Block " + b + " already exists in state "
@@ -388,8 +388,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     LOG.info("Recover RBW replica " + b);
 
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
       
       // check the replica's state
@@ -453,8 +453,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   public ReplicaInPipeline convertTemporaryToRbw(ExtendedBlock b)
     throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       final long blockId = b.getBlockId();
       final long expectedGs = b.getGenerationStamp();
       final long visible = b.getNumBytes();
@@ -527,8 +527,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
           " should be greater than the replica " + b + "'s generation stamp");
     }
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b);
       LOG.info("Appending to " + replicaInfo);
       if (replicaInfo.getState() != ReplicaState.FINALIZED) {
@@ -616,8 +616,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     LOG.info("Recover failed append to " + b);
 
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = recoverCheck(b, newGS, expectedBlockLen);
 
       FsVolumeReference ref = replicaInfo.getVolume().obtainReference();
@@ -645,8 +645,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   public String recoverClose(ExtendedBlock b, long newGS, long expectedBlockLen) throws IOException {
     LOG.info("Recover failed close " + b);
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       // check replica's state
       ReplicaInfo replicaInfo = recoverCheck(b, newGS, expectedBlockLen);
       // bump the replica's GS
@@ -704,8 +704,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
       throw new IOException("Cannot finalize block from Interrupted Thread");
     }
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = getReplicaInfo(b);
       if (replicaInfo.getState() == ReplicaState.FINALIZED) {
         // this is legal, when recovery happens on a file that has
@@ -721,8 +721,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   @Override
   public void unfinalizeBlock(ExtendedBlock b) throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(), b.getLocalBlock());
       if (replicaInfo != null && replicaInfo.getState() == ReplicaState.TEMPORARY) {
         // remove from volumeMap
@@ -747,8 +747,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   @Override
   public boolean contains(ExtendedBlock block) {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
+    lock.readLock().lock();
     try {
-      lock.readLock().lock();
       final long blockId = block.getLocalBlock().getBlockId();
       return getFile(block.getBlockPoolId(), blockId, false) != null;
     } finally {
@@ -763,8 +763,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
       final File f;
       final FsVolumeImpl v;
       ReentrantReadWriteLock lock = idReadWriteLock.getLock(invalidBlks[i].getBlockId());
+      lock.writeLock().lock();
       try {
-        lock.writeLock().lock();
         final ReplicaInfo info = volumeMap.get(bpid, invalidBlks[i]);
         if (info == null) {
           // It is okay if the block is not found -- it may be deleted earlier.
@@ -853,8 +853,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
     Executor volumeExecutor;
 
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
+    lock.readLock().lock();
     try {
-      lock.readLock().lock();
       ReplicaInfo info = volumeMap.get(bpid, blockId);
       boolean success = false;
       try {
@@ -924,8 +924,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   @Override
   public ReplicaRecoveryInfo initReplicaRecovery(RecoveringBlock rBlock) throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(rBlock.getBlock().getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       return initReplicaRecovery(rBlock.getBlock().getBlockPoolId(), rBlock.getBlock()
         .getLocalBlock(), rBlock.getNewGenerationStamp(), datanode.getDnConf()
         .getXceiverStopTimeout());
@@ -1000,8 +1000,8 @@ public class NewFsDatasetImpl extends FsDatasetImpl {
   public String updateReplicaUnderRecovery(ExtendedBlock oldBlock, long recoveryId,
     long newBlockId, long newLength) throws IOException {
     ReentrantReadWriteLock lock = idReadWriteLock.getLock(oldBlock.getBlockId());
+    lock.writeLock().lock();
     try {
-      lock.writeLock().lock();
       //get replica
       final String bpid = oldBlock.getBlockPoolId();
       final ReplicaInfo replica = volumeMap.get(bpid, oldBlock.getBlockId());
