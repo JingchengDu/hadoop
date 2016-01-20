@@ -79,7 +79,7 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
       final Class<? extends Factory> clazz = conf.getClass(
           DFSConfigKeys.DFS_DATANODE_FSDATASET_FACTORY_KEY,
           FsDatasetFactory.class,
-          Factory.class);;
+          Factory.class);
       return ReflectionUtils.newInstance(clazz, conf);
     }
 
