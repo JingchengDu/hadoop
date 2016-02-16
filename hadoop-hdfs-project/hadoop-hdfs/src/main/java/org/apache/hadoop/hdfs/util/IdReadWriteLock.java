@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.util;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 
@@ -43,6 +45,8 @@ import com.google.common.annotations.VisibleForTesting;
  */
 @InterfaceAudience.Private
 public class IdReadWriteLock {
+  static final Log LOG = LogFactory.getLog(IdReadWriteLock.class);
+  private long sleepInterval = 10000;  //10 seconds
   // The number of lock we want to easily support. It's not a maximum.
   private static final int NB_CONCURRENT_LOCKS = 1000;
   // The pool to get entry from, entries are mapped by weak reference to make it able to be
@@ -60,7 +64,10 @@ public class IdReadWriteLock {
   private int threshold = 100;
 
   public IdReadWriteLock(Configuration conf) {
-    threshold = conf.getInt("receiver.lockpool.threshold", threshold);
+    threshold = conf.getInt("lock.pool.threshold", threshold);
+    sleepInterval = conf.getLong("lock.pool.interval", 10000);
+    LOG.info("*** lock pool threshold is " + threshold);
+    LOG.info("*** lock pool interval is " + sleepInterval);
     evitThread.start();
   }
   
@@ -90,7 +97,7 @@ public class IdReadWriteLock {
       while (this.go) {
         synchronized (this) {
           try {
-            this.wait(10000); // 10 seconds
+            this.wait(sleepInterval);
           } catch (InterruptedException e) {
             e.printStackTrace();
             Thread.currentThread().interrupt();
