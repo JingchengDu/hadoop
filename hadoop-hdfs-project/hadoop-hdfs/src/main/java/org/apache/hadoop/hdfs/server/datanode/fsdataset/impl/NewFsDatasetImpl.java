@@ -60,18 +60,20 @@ import org.apache.hadoop.util.Time;
 public class NewFsDatasetImpl extends FsDatasetImpl {
   static final Log LOG = LogFactory.getLog(NewFsDatasetImpl.class);
   private Object[] locks;
+  private int lockPoolSize = 128;
 
   NewFsDatasetImpl(DataNode datanode, DataStorage storage, Configuration conf) throws IOException {
     super(datanode, storage, conf);
-    int length = 128;
-    locks = new Object[length];
-    for (int i = 0; i < length; i++) {
+    this.lockPoolSize = conf.getInt("lock.pool.size", 128);
+    LOG.info("***The lock pool size " + lockPoolSize);
+    locks = new Object[lockPoolSize];
+    for (int i = 0; i < lockPoolSize; i++) {
       locks[i] = new Object();
     }
   }
 
   private Object getLock(long blockId) {
-    return locks[Math.abs((int) (blockId % 128))];
+    return locks[Math.abs((int) (blockId % lockPoolSize))];
   }
 
   @Override
