@@ -291,6 +291,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     volFailuresTolerated =
       conf.getInt(DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY,
                   DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_DEFAULT);
+    idReadWriteLock = new IdReadWriteLock(conf);
+    volumeOpLock = new ReentrantReadWriteLock();
 
     String[] dataDirs = conf.getTrimmedStrings(DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY);
     Collection<StorageLocation> dataLocations = DataNode.getStorageLocations(conf);
@@ -362,8 +364,6 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     blockPinningEnabled = conf.getBoolean(
       DFSConfigKeys.DFS_DATANODE_BLOCK_PINNING_ENABLED,
       DFSConfigKeys.DFS_DATANODE_BLOCK_PINNING_ENABLED_DEFAULT);
-    idReadWriteLock = new IdReadWriteLock(conf);
-    volumeOpLock = new ReentrantReadWriteLock();
   }
 
   /**
