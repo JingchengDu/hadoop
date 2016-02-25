@@ -1487,7 +1487,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         lock.writeLock().unlock();
       }
     } finally {
-      volumeOpLock.readLock().lock();
+      volumeOpLock.readLock().unlock();
     }
   }
 
@@ -2943,7 +2943,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         lock.writeLock().unlock();
       }
     } finally {
-      volumeOpLock.readLock().lock();
+      volumeOpLock.readLock().unlock();
     }
 
     File datafile = getBlockFile(block);
