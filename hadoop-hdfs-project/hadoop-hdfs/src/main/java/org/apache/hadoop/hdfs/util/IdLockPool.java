@@ -18,8 +18,6 @@
  */
 package org.apache.hadoop.hdfs.util;
 
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -44,24 +42,24 @@ import com.google.common.annotations.VisibleForTesting;
  * For write lock, use lock.writeLock()
  */
 @InterfaceAudience.Private
-public class IdReadWriteLock {
-  static final Log LOG = LogFactory.getLog(IdReadWriteLock.class);
-  private final WeakObjectPool<Long, ReentrantReadWriteLock> lockPool;
+public class IdLockPool {
+  static final Log LOG = LogFactory.getLog(IdLockPool.class);
+  private final WeakObjectPool<Long, Object> lockPool;
   
   EvictThread evitThread = new EvictThread();
   private long sleepInterval = 10000;  //10 seconds
   private int threshold = 150;
   private int concurrencyLevel = 128;
 
-  public IdReadWriteLock(Configuration conf) {
+  public IdLockPool(Configuration conf) {
     threshold = conf.getInt("dfs.lock.pool.clean.threshold", threshold);
     sleepInterval = conf.getLong("dfs.lock.pool.clean.interval", sleepInterval);
     concurrencyLevel = conf.getInt("dfs.lock.pool.concurrencyLevel", concurrencyLevel);
-    lockPool = new WeakObjectPool<Long, ReentrantReadWriteLock>(
-      new WeakObjectPool.ObjectFactory<Long, ReentrantReadWriteLock>() {
+    lockPool = new WeakObjectPool<Long, Object>(
+      new WeakObjectPool.ObjectFactory<Long, Object>() {
         @Override
-        public ReentrantReadWriteLock createObject(Long id) {
-          return new ReentrantReadWriteLock();
+        public Object createObject(Long id) {
+          return new Object();
         }
       }, 1280, concurrencyLevel);
     evitThread.start();
@@ -75,8 +73,8 @@ public class IdReadWriteLock {
    * Get the ReentrantReadWriteLock corresponding to the given id
    * @param id an arbitrary number to identify the lock
    */
-  public ReentrantReadWriteLock getLock(long id) {
-    ReentrantReadWriteLock readWriteLock = lockPool.get(id);
+  public Object getLock(long id) {
+    Object readWriteLock = lockPool.get(id);
     evitThread.evict();
     return readWriteLock;
   }
@@ -125,20 +123,5 @@ public class IdReadWriteLock {
     Thread.sleep(200);
     lockPool.purge();
     return lockPool.size();
-  }
-
-  @VisibleForTesting
-  public void waitForWaiters(long id, int numWaiters) throws InterruptedException {
-    for (ReentrantReadWriteLock readWriteLock;;) {
-      readWriteLock = lockPool.get(id);
-      if (readWriteLock != null) {
-        synchronized (readWriteLock) {
-          if (readWriteLock.getQueueLength() >= numWaiters) {
-            return;
-          }
-        }
-      }
-      Thread.sleep(50);
-    }
   }
 }
