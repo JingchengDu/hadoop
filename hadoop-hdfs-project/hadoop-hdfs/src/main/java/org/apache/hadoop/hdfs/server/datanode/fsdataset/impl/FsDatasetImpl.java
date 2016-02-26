@@ -1986,10 +1986,15 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   File validateBlockFile(String bpid, long blockId) {
     //Should we check for metadata file too?
-    Object mutex = getBlockOpMutex(blockId);
     final File f;
-    synchronized (mutex) {
-      f = getFile(bpid, blockId, false);
+    volumeOpLock.readLock().lock();
+    Object mutex = getBlockOpMutex(blockId);
+    try {
+      synchronized (mutex) {
+        f = getFile(bpid, blockId, false);
+      }
+    } finally {
+      volumeOpLock.readLock().unlock();
     }
 
     if(f != null ) {
@@ -2225,8 +2230,13 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public boolean contains(final ExtendedBlock block) {
     final long blockId = block.getLocalBlock().getBlockId();
-    synchronized (getBlockOpMutex(blockId)) {
-      return getFile(block.getBlockPoolId(), blockId, false) != null;
+    volumeOpLock.readLock().lock();
+    try {
+      synchronized (getBlockOpMutex(blockId)) {
+        return getFile(block.getBlockPoolId(), blockId, false) != null;
+      }
+    } finally {
+      volumeOpLock.readLock().unlock();
     }
   }
 
