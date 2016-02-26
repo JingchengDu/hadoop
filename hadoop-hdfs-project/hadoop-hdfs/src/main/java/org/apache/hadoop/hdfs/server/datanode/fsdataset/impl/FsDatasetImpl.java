@@ -1872,30 +1872,28 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       builders.put(v.getStorageID(), BlockListAsLongs.builder());
     }
 
-    volumeOpLock.readLock().lock();
+    volumeOpLock.writeLock().lock();
     try {
-      synchronized (this) {
-        for (ReplicaInfo b : volumeMap.replicas(bpid)) {
-          switch(b.getState()) {
-            case FINALIZED:
-            case RBW:
-            case RWR:
-              builders.get(b.getVolume().getStorageID()).add(b);
-              break;
-            case RUR:
-              ReplicaUnderRecovery rur = (ReplicaUnderRecovery)b;
-              builders.get(rur.getVolume().getStorageID())
-                  .add(rur.getOriginalReplica());
-              break;
-            case TEMPORARY:
-              break;
-            default:
-              assert false : "Illegal ReplicaInfo state.";
-          }
+      for (ReplicaInfo b : volumeMap.replicas(bpid)) {
+        switch(b.getState()) {
+          case FINALIZED:
+          case RBW:
+          case RWR:
+            builders.get(b.getVolume().getStorageID()).add(b);
+            break;
+          case RUR:
+            ReplicaUnderRecovery rur = (ReplicaUnderRecovery)b;
+            builders.get(rur.getVolume().getStorageID())
+                .add(rur.getOriginalReplica());
+            break;
+          case TEMPORARY:
+            break;
+          default:
+            assert false : "Illegal ReplicaInfo state.";
         }
       }
     } finally {
-      volumeOpLock.readLock().unlock();
+      volumeOpLock.writeLock().unlock();
     }
 
     for (FsVolumeImpl v : curVolumes) {
@@ -1911,20 +1909,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   @Override
   public List<FinalizedReplica> getFinalizedBlocks(String bpid) {
-    volumeOpLock.readLock().lock();
+    volumeOpLock.writeLock().lock();
     try {
-      synchronized (this) {
-        ArrayList<FinalizedReplica> finalized =
-          new ArrayList<FinalizedReplica>(volumeMap.size(bpid));
-        for (ReplicaInfo b : volumeMap.replicas(bpid)) {
-          if(b.getState() == ReplicaState.FINALIZED) {
-            finalized.add(new FinalizedReplica((FinalizedReplica)b));
-          }
+      ArrayList<FinalizedReplica> finalized =
+        new ArrayList<FinalizedReplica>(volumeMap.size(bpid));
+      for (ReplicaInfo b : volumeMap.replicas(bpid)) {
+        if(b.getState() == ReplicaState.FINALIZED) {
+          finalized.add(new FinalizedReplica((FinalizedReplica)b));
         }
-        return finalized;
       }
+      return finalized;
     } finally {
-      volumeOpLock.readLock().unlock();
+      volumeOpLock.writeLock().unlock();
     }
   }
 
@@ -1933,21 +1929,19 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   @Override
   public List<FinalizedReplica> getFinalizedBlocksOnPersistentStorage(String bpid) {
-    volumeOpLock.readLock().lock();
+    volumeOpLock.writeLock().lock();
     try {
-      synchronized (this) {
-        ArrayList<FinalizedReplica> finalized =
-          new ArrayList<FinalizedReplica>(volumeMap.size(bpid));
-        for (ReplicaInfo b : volumeMap.replicas(bpid)) {
-          if(!b.getVolume().isTransientStorage() &&
-             b.getState() == ReplicaState.FINALIZED) {
-            finalized.add(new FinalizedReplica((FinalizedReplica)b));
-          }
+      ArrayList<FinalizedReplica> finalized =
+        new ArrayList<FinalizedReplica>(volumeMap.size(bpid));
+      for (ReplicaInfo b : volumeMap.replicas(bpid)) {
+        if(!b.getVolume().isTransientStorage() &&
+           b.getState() == ReplicaState.FINALIZED) {
+          finalized.add(new FinalizedReplica((FinalizedReplica)b));
         }
-        return finalized;
       }
+      return finalized;
     } finally {
-      volumeOpLock.readLock().unlock();
+      volumeOpLock.writeLock().unlock();
     }
   }
 
