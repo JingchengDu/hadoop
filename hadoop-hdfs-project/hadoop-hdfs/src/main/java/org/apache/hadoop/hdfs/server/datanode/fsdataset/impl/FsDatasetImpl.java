@@ -2225,7 +2225,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public boolean contains(final ExtendedBlock block) {
     final long blockId = block.getLocalBlock().getBlockId();
-    return getFile(block.getBlockPoolId(), blockId, false) != null;
+    synchronized (getBlockOpMutex(blockId)) {
+      return getFile(block.getBlockPoolId(), blockId, false) != null;
+    }
   }
 
   /**
