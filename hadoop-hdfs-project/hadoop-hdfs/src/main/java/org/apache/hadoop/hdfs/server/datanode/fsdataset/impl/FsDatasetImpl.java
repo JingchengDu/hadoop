@@ -2017,8 +2017,6 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   File validateBlockFile(String bpid, long blockId) {
     //Should we check for metadata file too?
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
-    lock.readLock().lock();
     final File f = getFile(bpid, blockId, false);
 
     if(f != null ) {
