@@ -180,8 +180,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public FsVolumeImpl getVolume(final ExtendedBlock b) {
     volumeOpLock.readLock().lock();
     try {
-      final ReplicaInfo r =  volumeMap.get(b.getBlockPoolId(), b.getLocalBlock());
-      return r != null? (FsVolumeImpl)r.getVolume(): null;
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(b.getBlockId());
+      lock.readLock().lock();
+      try {
+        final ReplicaInfo r =  volumeMap.get(b.getBlockPoolId(), b.getLocalBlock());
+        return r != null? (FsVolumeImpl)r.getVolume(): null;
+      } finally {
+        lock.readLock().unlock();
+      }
     } finally {
       volumeOpLock.readLock().unlock();
     }
@@ -2572,8 +2578,19 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   @Override 
   public String getReplicaString(String bpid, long blockId) {
-    final Replica r = volumeMap.get(bpid, blockId);
-    return r == null? "null": r.toString();
+    volumeOpLock.readLock().lock();
+    try {
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
+      lock.readLock().lock();
+      try {
+        final Replica r = volumeMap.get(bpid, blockId);
+        return r == null? "null": r.toString();
+      } finally {
+        lock.readLock().unlock();
+      }
+    } finally {
+      volumeOpLock.readLock().unlock();
+    }
   }
 
   @Override // FsDatasetSpi
@@ -2813,14 +2830,25 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public long getReplicaVisibleLength(final ExtendedBlock block)
   throws IOException {
-    final Replica replica = getReplicaInfo(block.getBlockPoolId(), 
-      block.getBlockId());
-    if (replica.getGenerationStamp() < block.getGenerationStamp()) {
-      throw new IOException(
-          "replica.getGenerationStamp() < block.getGenerationStamp(), block="
-          + block + ", replica=" + replica);
+    volumeOpLock.readLock().lock();
+    try {
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(block.getBlockId());
+      lock.readLock().lock();
+      try {
+        final Replica replica = getReplicaInfo(block.getBlockPoolId(), 
+          block.getBlockId());
+        if (replica.getGenerationStamp() < block.getGenerationStamp()) {
+          throw new IOException(
+              "replica.getGenerationStamp() < block.getGenerationStamp(), block="
+              + block + ", replica=" + replica);
+        }
+        return replica.getVisibleLength();
+      } finally {
+        lock.readLock().unlock();
+      }
+    } finally {
+      volumeOpLock.readLock().unlock();
     }
-    return replica.getVisibleLength();
   }
 
   @Override
