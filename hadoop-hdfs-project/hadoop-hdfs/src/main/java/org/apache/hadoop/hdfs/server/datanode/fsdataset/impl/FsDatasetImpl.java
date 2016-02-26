@@ -2018,12 +2018,17 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   File validateBlockFile(String bpid, long blockId) {
     //Should we check for metadata file too?
     final File f;
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
-    lock.readLock().lock();
+    volumeOpLock.readLock().lock();
     try {
-      f = getFile(bpid, blockId, false);
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
+      lock.readLock().lock();
+      try {
+        f = getFile(bpid, blockId, false);
+      } finally {
+        lock.readLock().unlock();
+      }
     } finally {
-      lock.readLock().unlock();
+      volumeOpLock.readLock().unlock();
     }
 
     if(f != null ) {
@@ -2265,12 +2270,17 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public boolean contains(final ExtendedBlock block) {
     final long blockId = block.getLocalBlock().getBlockId();
-    ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
-    lock.readLock().lock();
+    volumeOpLock.readLock().lock();
     try {
-      return getFile(block.getBlockPoolId(), blockId, false) != null;
+      ReentrantReadWriteLock lock = idReadWriteLock.getLock(blockId);
+      lock.readLock().lock();
+      try {
+        return getFile(block.getBlockPoolId(), blockId, false) != null;
+      } finally {
+        lock.readLock().unlock();
+      }
     } finally {
-      lock.readLock().unlock();
+      volumeOpLock.readLock().unlock();
     }
   }
 
