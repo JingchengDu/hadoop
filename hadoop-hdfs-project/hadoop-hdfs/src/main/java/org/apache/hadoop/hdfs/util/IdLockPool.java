@@ -47,9 +47,9 @@ public class IdLockPool {
   private final WeakObjectPool<Long, Object> lockPool;
   
   EvictThread evitThread = new EvictThread();
-  private long sleepInterval = 10000;  //10 seconds
+  private long sleepInterval = 1000;  //1 seconds
   private int threshold = 150;
-  private int concurrencyLevel = 128;
+  private int concurrencyLevel = 16;
 
   public IdLockPool(Configuration conf) {
     threshold = conf.getInt("dfs.lock.pool.clean.threshold", threshold);
