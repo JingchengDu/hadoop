@@ -138,9 +138,11 @@ class ReplicaMap {
    * Add all entries from the given replica map into the local replica map.
    */
   void addAll(ReplicaMap other) {
-    map.putAll(other.map);
+    synchronized (mutex) {
+      map.putAll(other.map);
+    }
   }
-  
+
   /**
    * Remove the replica's meta information from the map that matches
    * the input block's id and generation stamp
