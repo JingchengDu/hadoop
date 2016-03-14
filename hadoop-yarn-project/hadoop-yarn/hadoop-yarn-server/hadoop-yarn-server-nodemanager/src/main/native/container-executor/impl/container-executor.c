@@ -59,12 +59,29 @@ FILE* ERRORFILE = NULL;
 static uid_t nm_uid = -1;
 static gid_t nm_gid = -1;
 
+struct configuration executor_cfg = {.size=0, .confdetails=NULL};
+
 char *concatenate(char *concat_pattern, char *return_path_name,
    int numArgs, ...);
 
 void set_nm_uid(uid_t user, gid_t group) {
   nm_uid = user;
   nm_gid = group;
+}
+
+//function used to load the configurations present in the secure config
+void read_executor_config(const char* file_name) {
+    read_config(file_name, &executor_cfg);
+}
+
+//function used to free executor configuration data
+void free_executor_configurations() {
+    free_configurations(&executor_cfg);
+}
+
+//Lookup nodemanager group from container executor configuration.
+char *get_nodemanager_group() {
+    return get_value(NM_GROUP_KEY, &executor_cfg);
 }
 
 /**
@@ -658,7 +675,7 @@ static struct passwd* get_user_info(const char* user) {
 }
 
 int is_whitelisted(const char *user) {
-  char **whitelist = get_values(ALLOWED_SYSTEM_USERS_KEY);
+  char **whitelist = get_values(ALLOWED_SYSTEM_USERS_KEY, &executor_cfg);
   char **users = whitelist;
   if (whitelist != NULL) {
     for(; *users; ++users) {
@@ -686,7 +703,7 @@ struct passwd* check_user(const char *user) {
     fflush(LOGFILE);
     return NULL;
   }
-  char *min_uid_str = get_value(MIN_USERID_KEY);
+  char *min_uid_str = get_value(MIN_USERID_KEY, &executor_cfg);
   int min_uid = DEFAULT_MIN_USERID;
   if (min_uid_str != NULL) {
     char *end_ptr = NULL;
@@ -713,7 +730,7 @@ struct passwd* check_user(const char *user) {
     free(user_info);
     return NULL;
   }
-  char **banned_users = get_values(BANNED_USERS_KEY);
+  char **banned_users = get_values(BANNED_USERS_KEY, &executor_cfg);
   banned_users = banned_users == NULL ?
     (char**) DEFAULT_BANNED_USERS : banned_users;
   char **banned_user = banned_users;
@@ -1062,7 +1079,7 @@ char* parse_docker_command_file(const char* command_file) {
 
 int run_docker(const char *command_file) {
   char* docker_command = parse_docker_command_file(command_file);
-  char* docker_binary = get_value(DOCKER_BINARY_KEY);
+  char* docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
   char* docker_command_with_binary = calloc(sizeof(char), EXECUTOR_PATH_MAX);
   snprintf(docker_command_with_binary, EXECUTOR_PATH_MAX, "%s %s", docker_binary, docker_command);
   char **args = extract_values_delim(docker_command_with_binary, " ");
@@ -1224,7 +1241,7 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
   char buffer[BUFFER_SIZE];
 
   char *docker_command = parse_docker_command_file(command_file);
-  char *docker_binary = get_value(DOCKER_BINARY_KEY);
+  char *docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
   if (docker_binary == NULL) {
     docker_binary = "docker";
   }
@@ -1579,9 +1596,9 @@ static int rmdir_as_nm(const char* path) {
 static int open_helper(int dirfd, const char *name) {
   int fd;
   if (dirfd >= 0) {
-    fd = openat(dirfd, name, O_RDONLY);
+    fd = openat(dirfd, name, O_RDONLY | O_NOFOLLOW);
   } else {
-    fd = open(name, O_RDONLY);
+    fd = open(name, O_RDONLY | O_NOFOLLOW);
   }
   if (fd >= 0) {
     return fd;
@@ -1615,6 +1632,34 @@ static int unlink_helper(int dirfd, const char *name, int flags) {
   return errno;
 }
 
+/**
+ * Determine if an entry in a directory is a symlink.
+ *
+ * @param dirfd     The directory file descriptor, or -1 if there is none.
+ * @param name      If dirfd is -1, this is the path to examine.
+ *                  Otherwise, this is the file name in the directory to
+ *                  examine.
+ *
+ * @return          0 if the entry is not a symlink
+ *                  1 if the entry is a symlink
+ *                  A negative errno code if we couldn't access the entry.
+ */
+static int is_symlink_helper(int dirfd, const char *name)
+{
+  struct stat stat;
+
+  if (dirfd < 0) {
+    if (lstat(name, &stat) < 0) {
+      return -errno;
+    }
+  } else {
+    if (fstatat(dirfd, name, &stat, AT_SYMLINK_NOFOLLOW) < 0) {
+      return -errno;
+    }
+  }
+  return !!S_ISLNK(stat.st_mode);
+}
+
 static int recursive_unlink_helper(int dirfd, const char *name,
                                    const char* fullpath)
 {
@@ -1622,6 +1667,28 @@ static int recursive_unlink_helper(int dirfd, const char *name,
   DIR *dfd = NULL;
   struct stat stat;
 
+  // Check to see if the file is a symlink.  If so, delete the symlink rather
+  // than what it points to.
+  ret = is_symlink_helper(dirfd, name);
+  if (ret < 0) {
+    // is_symlink_helper failed.
+    ret = -ret;
+    fprintf(LOGFILE, "is_symlink_helper(%s) failed: %s\n",
+            fullpath, strerror(ret));
+    goto done;
+  } else if (ret == 1) {
+    // is_symlink_helper determined that the path is a symlink.
+    ret = unlink_helper(dirfd, name, 0);
+    if (ret) {
+      fprintf(LOGFILE, "failed to unlink symlink %s: %s\n",
+              fullpath, strerror(ret));
+    }
+    goto done;
+  }
+
+  // Open the file.  We use O_NOFOLLOW here to ensure that we if a symlink was
+  // swapped in by an attacker, we will fail to follow it rather than deleting
+  // something we potentially should not.
   fd = open_helper(dirfd, name);
   if (fd == -EACCES) {
     ret = chmod_helper(dirfd, name, 0700);

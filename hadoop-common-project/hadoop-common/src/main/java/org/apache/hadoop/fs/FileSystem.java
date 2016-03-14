@@ -2659,6 +2659,16 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
+   * Unset the storage policy set for a given file or directory.
+   * @param src file or directory path.
+   * @throws IOException
+   */
+  public void unsetStoragePolicy(Path src) throws IOException {
+    throw new UnsupportedOperationException(getClass().getSimpleName()
+        + " doesn't support unsetStoragePolicy");
+  }
+
+  /**
    * Query the effective storage policy ID for the given file or directory.
    *
    * @param src file or directory path.
@@ -3184,15 +3194,16 @@ public abstract class FileSystem extends Configured implements Closeable {
     private static class StatisticsDataReferenceCleaner implements Runnable {
       @Override
       public void run() {
-        while (true) {
+        while (!Thread.interrupted()) {
           try {
             StatisticsDataReference ref =
                 (StatisticsDataReference)STATS_DATA_REF_QUEUE.remove();
             ref.cleanUp();
+          } catch (InterruptedException ie) {
+            LOG.warn("Cleaner thread interrupted, will stop", ie);
+            Thread.currentThread().interrupt();
           } catch (Throwable th) {
-            // the cleaner thread should continue to run even if there are
-            // exceptions, including InterruptedException
-            LOG.warn("exception in the cleaner thread but it will continue to "
+            LOG.warn("Exception in the cleaner thread but it will continue to "
                 + "run", th);
           }
         }

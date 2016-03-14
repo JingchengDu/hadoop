@@ -15,20 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.io.erasurecode.rawcoder;
 
-import org.junit.Before;
-import org.junit.Test;
+package org.apache.hadoop.fs.azure.contract;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.contract.AbstractBondedFSContract;
 
-/**
- * Test raw Reed-solomon coder implemented in Java.
- */
-public class TestRSRawCoder extends TestRSRawCoderBase {
+public class NativeAzureFileSystemContract extends AbstractBondedFSContract {
 
-  @Before
-  public void setup() {
-    this.encoderClass = RSRawEncoder.class;
-    this.decoderClass = RSRawDecoder.class;
-    setAllowDump(false); // Change to true to allow verbose dump for debugging
+  public static final String CONTRACT_XML = "wasb.xml";
+
+  protected NativeAzureFileSystemContract(Configuration conf) {
+    super(conf);
+    //insert the base features
+    addConfResource(CONTRACT_XML);
+  }
+
+  @Override
+  public String getScheme() {
+    return "wasb";
   }
 }

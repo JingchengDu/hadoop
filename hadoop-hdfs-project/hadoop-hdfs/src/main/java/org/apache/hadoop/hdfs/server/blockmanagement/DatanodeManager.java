@@ -23,6 +23,7 @@ import static org.apache.hadoop.util.Time.monotonicNow;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -70,6 +71,8 @@ public class DatanodeManager {
   private final HeartbeatManager heartbeatManager;
   private final FSClusterStats fsClusterStats;
 
+  private volatile long heartbeatIntervalSeconds;
+  private volatile int heartbeatRecheckInterval;
   /**
    * Stores the datanode -> block map.  
    * <p>
@@ -113,7 +116,7 @@ public class DatanodeManager {
   /** The period to wait for datanode heartbeat.*/
   private long heartbeatExpireInterval;
   /** Ask Datanode only up to this many blocks to delete. */
-  final int blockInvalidateLimit;
+  private volatile int blockInvalidateLimit;
 
   /** The interval for judging stale DataNodes for read/write */
   private final long staleInterval;
@@ -227,10 +230,10 @@ public class DatanodeManager {
       dnsToSwitchMapping.resolve(locations);
     }
 
-    final long heartbeatIntervalSeconds = conf.getLong(
+    heartbeatIntervalSeconds = conf.getLong(
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT);
-    final int heartbeatRecheckInterval = conf.getInt(
+    heartbeatRecheckInterval = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_DEFAULT); // 5 minutes
     this.heartbeatExpireInterval = 2 * heartbeatRecheckInterval
@@ -348,6 +351,10 @@ public class DatanodeManager {
     return fsClusterStats;
   }
 
+  int getBlockInvalidateLimit() {
+    return blockInvalidateLimit;
+  }
+
   /** @return the datanode statistics. */
   public DatanodeStatistics getDatanodeStatistics() {
     return heartbeatManager;
@@ -411,6 +418,15 @@ public class DatanodeManager {
   /** @return the datanode descriptor for the host. */
   public DatanodeDescriptor getDatanodeByXferAddr(String host, int xferPort) {
     return host2DatanodeMap.getDatanodeByXferAddr(host, xferPort);
+  }
+
+  /** @return the datanode descriptors for all nodes. */
+  public Set<DatanodeDescriptor> getDatanodes() {
+    final Set<DatanodeDescriptor> datanodes;
+    synchronized (this) {
+      datanodes = new HashSet<>(datanodeMap.values());
+    }
+    return datanodes;
   }
 
   /** @return the Host2NodesMap */
@@ -1094,6 +1110,14 @@ public class DatanodeManager {
     return staleInterval;
   }
 
+  public long getHeartbeatInterval() {
+    return this.heartbeatIntervalSeconds;
+  }
+
+  public long getHeartbeatRecheckInterval() {
+    return this.heartbeatRecheckInterval;
+  }
+
   /**
    * Set the number of current stale DataNodes. The HeartbeatManager got this
    * number based on DataNodes' heartbeats.
@@ -1487,6 +1511,47 @@ public class DatanodeManager {
   }
 
   /**
+   * Handles a lifeline message sent by a DataNode.
+   *
+   * @param nodeReg registration info for DataNode sending the lifeline
+   * @param reports storage reports from DataNode
+   * @param blockPoolId block pool ID
+   * @param cacheCapacity cache capacity at DataNode
+   * @param cacheUsed cache used at DataNode
+   * @param xceiverCount estimated count of transfer threads running at DataNode
+   * @param maxTransfers count of transfers running at DataNode
+   * @param failedVolumes count of failed volumes at DataNode
+   * @param volumeFailureSummary info on failed volumes at DataNode
+   * @throws IOException if there is an error
+   */
+  public void handleLifeline(DatanodeRegistration nodeReg,
+      StorageReport[] reports, String blockPoolId, long cacheCapacity,
+      long cacheUsed, int xceiverCount, int maxTransfers, int failedVolumes,
+      VolumeFailureSummary volumeFailureSummary) throws IOException {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Received handleLifeline from nodeReg = " + nodeReg);
+    }
+    DatanodeDescriptor nodeinfo = getDatanode(nodeReg);
+    if (nodeinfo == null) {
+      // This is null if the DataNode has not yet registered.  We expect this
+      // will never happen, because the DataNode has logic to prevent sending
+      // lifeline messages until after initial registration is successful.
+      // Lifeline message handling can't send commands back to the DataNode to
+      // tell it to register, so simply exit.
+      return;
+    }
+    if (nodeinfo.isDisallowed()) {
+      // This is highly unlikely, because heartbeat handling is much more
+      // frequent and likely would have already sent the disallowed error.
+      // Lifeline messages are not intended to send any kind of control response
+      // back to the DataNode, so simply exit.
+      return;
+    }
+    heartbeatManager.updateLifeline(nodeinfo, reports, cacheCapacity, cacheUsed,
+        xceiverCount, failedVolumes, volumeFailureSummary);
+  }
+
+  /**
    * Convert a CachedBlockList into a DatanodeCommand with a list of blocks.
    *
    * @param list       The {@link CachedBlocksList}.  This function 
@@ -1616,6 +1681,29 @@ public class DatanodeManager {
         return avgLoad;
       }
     };
+  }
+
+  public void setHeartbeatInterval(long intervalSeconds) {
+    setHeartbeatInterval(intervalSeconds,
+        this.heartbeatRecheckInterval);
+  }
+
+  public void setHeartbeatRecheckInterval(int recheckInterval) {
+    setHeartbeatInterval(this.heartbeatIntervalSeconds,
+        recheckInterval);
+  }
+
+  /**
+   * Set parameters derived from heartbeat interval.
+   */
+  private void setHeartbeatInterval(long intervalSeconds,
+      int recheckInterval) {
+    this.heartbeatIntervalSeconds = intervalSeconds;
+    this.heartbeatRecheckInterval = recheckInterval;
+    this.heartbeatExpireInterval = 2L * recheckInterval + 10 * 1000
+        * intervalSeconds;
+    this.blockInvalidateLimit = Math.max(20 * (int) (intervalSeconds),
+        DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_DEFAULT);
   }
 }
 

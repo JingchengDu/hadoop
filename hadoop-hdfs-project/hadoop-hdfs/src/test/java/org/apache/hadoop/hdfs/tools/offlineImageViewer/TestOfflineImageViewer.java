@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 import java.io.StringReader;
 import java.net.HttpURLConnection;
@@ -47,6 +48,8 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
+import com.google.common.io.Files;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -62,10 +65,13 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.server.namenode.FSImageTestUtil;
+import org.apache.hadoop.hdfs.server.namenode.NameNodeLayoutVersion;
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.log4j.Level;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -89,8 +95,7 @@ public class TestOfflineImageViewer {
   final static HashMap<String, FileStatus> writtenFiles = Maps.newHashMap();
   static int dirCount = 0;
 
-  @Rule
-  public TemporaryFolder folder = new TemporaryFolder();
+  private static File tempDir;
 
   // Create a populated namespace for later testing. Save its contents to a
   // data structure and store its fsimage location.
@@ -98,6 +103,7 @@ public class TestOfflineImageViewer {
   // multiple tests.
   @BeforeClass
   public static void createOriginalFSImage() throws IOException {
+    tempDir = Files.createTempDir();
     MiniDFSCluster cluster = null;
     try {
       Configuration conf = new Configuration();
@@ -169,6 +175,9 @@ public class TestOfflineImageViewer {
       hdfs.setXAttr(xattr, "user.a2", new byte[]{ 0x37, 0x38, 0x39 });
       // OIV should be able to handle empty value XAttrs
       hdfs.setXAttr(xattr, "user.a3", null);
+      // OIV should be able to handle XAttr values that can't be expressed
+      // as UTF8
+      hdfs.setXAttr(xattr, "user.a4", new byte[]{ -0x3d, 0x28 });
       writtenFiles.put(xattr.toString(), hdfs.getFileStatus(xattr));
 
       // Write results to the fsimage file
@@ -190,6 +199,7 @@ public class TestOfflineImageViewer {
 
   @AfterClass
   public static void deleteOriginalFSImage() throws IOException {
+    FileUtils.deleteQuietly(tempDir);
     if (originalFsimage != null && originalFsimage.exists()) {
       originalFsimage.delete();
     }
@@ -204,7 +214,7 @@ public class TestOfflineImageViewer {
 
   @Test(expected = IOException.class)
   public void testTruncatedFSImage() throws IOException {
-    File truncatedFile = folder.newFile();
+    File truncatedFile = new File(tempDir, "truncatedFsImage");
     PrintStream output = new PrintStream(NullOutputStream.NULL_OUTPUT_STREAM);
     copyPartOfFile(originalFsimage, truncatedFile);
     new FileDistributionCalculator(new Configuration(), 0, 0, output)
@@ -448,5 +458,79 @@ public class TestOfflineImageViewer {
     connection.setRequestMethod("GET");
     connection.connect();
     assertEquals(expectedCode, connection.getResponseCode());
+  }
+
+  /**
+   * Tests the ReverseXML processor.
+   *
+   * 1. Translate fsimage -> reverseImage.xml
+   * 2. Translate reverseImage.xml -> reverseImage
+   * 3. Translate reverseImage -> reverse2Image.xml
+   * 4. Verify that reverseImage.xml and reverse2Image.xml match
+   *
+   * @throws Throwable
+   */
+  @Test
+  public void testReverseXmlRoundTrip() throws Throwable {
+    GenericTestUtils.setLogLevel(OfflineImageReconstructor.LOG,
+        Level.TRACE);
+    File reverseImageXml = new File(tempDir, "reverseImage.xml");
+    File reverseImage =  new File(tempDir, "reverseImage");
+    File reverseImage2Xml =  new File(tempDir, "reverseImage2.xml");
+    LOG.info("Creating reverseImage.xml=" + reverseImageXml.getAbsolutePath() +
+        ", reverseImage=" + reverseImage.getAbsolutePath() +
+        ", reverseImage2Xml=" + reverseImage2Xml.getAbsolutePath());
+    if (OfflineImageViewerPB.run(new String[] { "-p", "XML",
+         "-i", originalFsimage.getAbsolutePath(),
+         "-o", reverseImageXml.getAbsolutePath() }) != 0) {
+      throw new IOException("oiv returned failure creating first XML file.");
+    }
+    if (OfflineImageViewerPB.run(new String[] { "-p", "ReverseXML",
+          "-i", reverseImageXml.getAbsolutePath(),
+          "-o", reverseImage.getAbsolutePath() }) != 0) {
+      throw new IOException("oiv returned failure recreating fsimage file.");
+    }
+    if (OfflineImageViewerPB.run(new String[] { "-p", "XML",
+        "-i", reverseImage.getAbsolutePath(),
+        "-o", reverseImage2Xml.getAbsolutePath() }) != 0) {
+      throw new IOException("oiv returned failure creating second " +
+          "XML file.");
+    }
+    // The XML file we wrote based on the re-created fsimage should be the
+    // same as the one we dumped from the original fsimage.
+    Assert.assertEquals("",
+      GenericTestUtils.getFilesDiff(reverseImageXml, reverseImage2Xml));
+  }
+
+  /**
+   * Tests that the ReverseXML processor doesn't accept XML files with the wrong
+   * layoutVersion.
+   */
+  @Test
+  public void testReverseXmlWrongLayoutVersion() throws Throwable {
+    File imageWrongVersion = new File(tempDir, "imageWrongVersion.xml");
+    PrintWriter writer = new PrintWriter(imageWrongVersion, "UTF-8");
+    try {
+      writer.println("<?xml version=\"1.0\"?>");
+      writer.println("<fsimage>");
+      writer.println("<version>");
+      writer.println(String.format("<layoutVersion>%d</layoutVersion>",
+          NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION + 1));
+      writer.println("<onDiskVersion>1</onDiskVersion>");
+      writer.println("<oivRevision>" +
+          "545bbef596c06af1c3c8dca1ce29096a64608478</oivRevision>");
+      writer.println("</version>");
+      writer.println("</fsimage>");
+    } finally {
+      writer.close();
+    }
+    try {
+      OfflineImageReconstructor.run(imageWrongVersion.getAbsolutePath(),
+          imageWrongVersion.getAbsolutePath() + ".out"); 
+      Assert.fail("Expected OfflineImageReconstructor to fail with " +
+          "version mismatch.");
+    } catch (Throwable t) {
+      GenericTestUtils.assertExceptionContains("Layout version mismatch.", t);
+    }
   }
 }

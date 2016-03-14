@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerResourceChangeRequest;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
@@ -91,6 +92,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEven
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeDecreaseContainerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeResourceUpdateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
@@ -226,7 +228,7 @@ public class CapacityScheduler extends
   private AsyncScheduleThread asyncSchedulerThread;
   private RMNodeLabelsManager labelManager;
   private SchedulerHealth schedulerHealth = new SchedulerHealth();
-  long lastNodeUpdateTime;
+  volatile long lastNodeUpdateTime;
 
   /**
    * EXPERT
@@ -926,7 +928,6 @@ public class CapacityScheduler extends
   }
 
   @Override
-  // Note: when AM asks to release container, we will acquire scheduler lock
   @Lock(Lock.NoLock.class)
   public Allocation allocate(ApplicationAttemptId applicationAttemptId,
       List<ResourceRequest> ask, List<ContainerId> release,
@@ -1082,6 +1083,20 @@ public class CapacityScheduler extends
       }
     }
 
+    // If the node is decommissioning, send an update to have the total
+    // resource equal to the used resource, so no available resource to
+    // schedule.
+    // TODO: Fix possible race-condition when request comes in before
+    // update is propagated
+    if (nm.getState() == NodeState.DECOMMISSIONING) {
+      this.rmContext
+          .getDispatcher()
+          .getEventHandler()
+          .handle(
+              new RMNodeResourceUpdateEvent(nm.getNodeID(), ResourceOption
+                  .newInstance(getSchedulerNode(nm.getNodeID())
+                      .getAllocatedResource(), 0)));
+    }
     schedulerHealth.updateSchedulerReleaseDetails(lastNodeUpdateTime,
       releaseResources);
     schedulerHealth.updateSchedulerReleaseCounts(releasedContainers);
@@ -1093,8 +1108,8 @@ public class CapacityScheduler extends
 
     // Now node data structures are upto date and ready for scheduling.
     if(LOG.isDebugEnabled()) {
-      LOG.debug("Node being looked for scheduling " + nm
-        + " availableResource: " + node.getAvailableResource());
+      LOG.debug("Node being looked for scheduling " + nm +
+          " availableResource: " + node.getUnallocatedResource());
     }
   }
   
@@ -1238,11 +1253,11 @@ public class CapacityScheduler extends
 
     // Try to schedule more if there are no reservations to fulfill
     if (node.getReservedContainer() == null) {
-      if (calculator.computeAvailableContainers(node.getAvailableResource(),
+      if (calculator.computeAvailableContainers(node.getUnallocatedResource(),
         minimumAllocation) > 0) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Trying to schedule on node: " + node.getNodeName() +
-              ", available: " + node.getAvailableResource());
+              ", available: " + node.getUnallocatedResource());
         }
 
         assignment = root.assignContainers(
@@ -1530,9 +1545,8 @@ public class CapacityScheduler extends
     }
   }
 
-  @Lock(CapacityScheduler.class)
   @Override
-  protected synchronized void completedContainerInternal(
+  protected void completedContainerInternal(
       RMContainer rmContainer, ContainerStatus containerStatus,
       RMContainerEventType event) {
     
@@ -1941,7 +1955,7 @@ public class CapacityScheduler extends
     return this.schedulerHealth;
   }
 
-  private synchronized void setLastNodeUpdateTime(long time) {
+  private void setLastNodeUpdateTime(long time) {
     this.lastNodeUpdateTime = time;
   }
 

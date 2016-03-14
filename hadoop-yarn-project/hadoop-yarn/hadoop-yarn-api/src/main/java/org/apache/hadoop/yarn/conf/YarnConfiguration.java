@@ -759,6 +759,18 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_LOG_DIRS = NM_PREFIX + "log-dirs";
   public static final String DEFAULT_NM_LOG_DIRS = "/tmp/logs";
 
+  /** The number of threads to handle log aggregation in node manager. */
+  public static final String NM_LOG_AGGREGATION_THREAD_POOL_SIZE =
+      NM_PREFIX + "logaggregation.threadpool-size-max";
+  public static final int DEFAULT_NM_LOG_AGGREGATION_THREAD_POOL_SIZE = 100;
+
+  /** Default permissions for container logs. */
+  public static final String NM_DEFAULT_CONTAINER_EXECUTOR_PREFIX =
+      NM_PREFIX + "default-container-executor.";
+  public static final String NM_DEFAULT_CONTAINER_EXECUTOR_LOG_DIRS_PERMISSIONS =
+      NM_DEFAULT_CONTAINER_EXECUTOR_PREFIX + "log-dirs.permissions";
+  public static final String NM_DEFAULT_CONTAINER_EXECUTOR_LOG_DIRS_PERMISSIONS_DEFAULT = "710";
+
   public static final String NM_RESOURCEMANAGER_MINIMUM_VERSION =
       NM_PREFIX + "resourcemanager.minimum.version";
   public static final String DEFAULT_NM_RESOURCEMANAGER_MINIMUM_VERSION = "NONE";
@@ -1729,6 +1741,18 @@ public class YarnConfiguration extends Configuration {
   public static final long TIMELINE_SERVICE_CLIENT_FD_RETAIN_SECS_DEFAULT =
       5*60;
 
+  public static final String
+      TIMELINE_SERVICE_CLIENT_INTERNAL_TIMERS_TTL_SECS =
+      TIMELINE_SERVICE_CLIENT_PREFIX + "internal-timers-ttl-secs";
+  public static final long
+      TIMELINE_SERVICE_CLIENT_INTERNAL_TIMERS_TTL_SECS_DEFAULT = 7 * 60;
+
+  // This is temporary solution. The configuration will be deleted once we have
+  // the FileSystem API to check whether append operation is supported or not.
+  public static final String TIMELINE_SERVICE_ENTITYFILE_FS_SUPPORT_APPEND
+      = TIMELINE_SERVICE_PREFIX
+      + "entity-file.fs-support-append";
+
   // mark app-history related configs @Private as application history is going
   // to be integrated into the timeline service
   @Private
@@ -2380,6 +2404,30 @@ public class YarnConfiguration extends Configuration {
 
   public static final String NM_SCRIPT_BASED_NODE_LABELS_PROVIDER_SCRIPT_OPTS =
       NM_SCRIPT_BASED_NODE_LABELS_PROVIDER_PREFIX + "opts";
+
+  // RM and NM CSRF props
+  public static final String REST_CSRF = "webapp.rest-csrf.";
+  public static final String RM_CSRF_PREFIX = RM_PREFIX + REST_CSRF;
+  public static final String NM_CSRF_PREFIX = NM_PREFIX + REST_CSRF;
+  public static final String TIMELINE_CSRF_PREFIX = TIMELINE_SERVICE_PREFIX +
+                                                    REST_CSRF;
+  public static final String RM_CSRF_ENABLED = RM_CSRF_PREFIX + "enabled";
+  public static final String NM_CSRF_ENABLED = NM_CSRF_PREFIX + "enabled";
+  public static final String TIMELINE_CSRF_ENABLED = TIMELINE_CSRF_PREFIX +
+                                                     "enabled";
+  public static final String RM_CSRF_CUSTOM_HEADER = RM_CSRF_PREFIX +
+                                                     "custom-header";
+  public static final String NM_CSRF_CUSTOM_HEADER = NM_CSRF_PREFIX +
+                                                     "custom-header";
+  public static final String TIMELINE_CSRF_CUSTOM_HEADER =
+      TIMELINE_CSRF_PREFIX + "custom-header";
+  public static final String RM_CSRF_METHODS_TO_IGNORE = RM_CSRF_PREFIX +
+                                                     "methods-to-ignore";
+  public static final String NM_CSRF_METHODS_TO_IGNORE = NM_CSRF_PREFIX +
+                                                         "methods-to-ignore";
+  public static final String TIMELINE_CSRF_METHODS_TO_IGNORE =
+      TIMELINE_CSRF_PREFIX + "methods-to-ignore";
+
 
   public YarnConfiguration() {
     super();

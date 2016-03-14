@@ -16,34 +16,15 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+package org.apache.hadoop.fs.azure.contract;
 
-#include "org_apache_hadoop.h"
-#include "../include/erasure_code.h"
-#include "org_apache_hadoop_io_erasurecode_ErasureCodeNative.h"
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.contract.AbstractContractMkdirTest;
+import org.apache.hadoop.fs.contract.AbstractFSContract;
 
-#ifdef UNIX
-#include "config.h"
-#endif
-
-JNIEXPORT void JNICALL
-Java_org_apache_hadoop_io_erasurecode_ErasureCodeNative_loadLibrary
-(JNIEnv *env, jclass myclass) {
-  char errMsg[1024];
-  load_erasurecode_lib(errMsg, sizeof(errMsg));
-  if (strlen(errMsg) > 0) {
-    THROW(env, "java/lang/UnsatisfiedLinkError", errMsg);
+public class TestAzureNativeContractMkdir extends AbstractContractMkdirTest {
+  @Override
+  protected AbstractFSContract createContract(Configuration conf) {
+    return new NativeAzureFileSystemContract(conf);
   }
-}
-
-JNIEXPORT jstring JNICALL
-Java_org_apache_hadoop_io_erasurecode_ErasureCodeNative_getLibraryName
-(JNIEnv *env, jclass myclass) {
-  char* libName = get_library_name();
-  if (libName == NULL) {
-    libName = "Unavailable";
-  }
-  return (*env)->NewStringUTF(env, libName);
 }

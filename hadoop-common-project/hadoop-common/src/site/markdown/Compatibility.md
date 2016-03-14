@@ -15,49 +15,7 @@
 Apache Hadoop Compatibility
 ===========================
 
-* [Apache Hadoop Compatibility](#Apache_Hadoop_Compatibility)
-    * [Purpose](#Purpose)
-    * [Compatibility types](#Compatibility_types)
-        * [Java API](#Java_API)
-            * [Use Cases](#Use_Cases)
-            * [Policy](#Policy)
-        * [Semantic compatibility](#Semantic_compatibility)
-            * [Policy](#Policy)
-        * [Wire compatibility](#Wire_compatibility)
-            * [Use Cases](#Use_Cases)
-            * [Policy](#Policy)
-        * [Java Binary compatibility for end-user applications i.e. Apache Hadoop ABI](#Java_Binary_compatibility_for_end-user_applications_i.e._Apache_Hadoop_ABI)
-            * [Use cases](#Use_cases)
-            * [Policy](#Policy)
-        * [REST APIs](#REST_APIs)
-            * [Policy](#Policy)
-        * [Metrics/JMX](#MetricsJMX)
-            * [Policy](#Policy)
-        * [File formats & Metadata](#File_formats__Metadata)
-            * [User-level file formats](#User-level_file_formats)
-                * [Policy](#Policy)
-            * [System-internal file formats](#System-internal_file_formats)
-                * [MapReduce](#MapReduce)
-                * [Policy](#Policy)
-                * [HDFS Metadata](#HDFS_Metadata)
-                * [Policy](#Policy)
-        * [Command Line Interface (CLI)](#Command_Line_Interface_CLI)
-            * [Policy](#Policy)
-        * [Web UI](#Web_UI)
-            * [Policy](#Policy)
-        * [Hadoop Configuration Files](#Hadoop_Configuration_Files)
-            * [Policy](#Policy)
-        * [Directory Structure](#Directory_Structure)
-            * [Policy](#Policy)
-        * [Java Classpath](#Java_Classpath)
-            * [Policy](#Policy)
-        * [Environment variables](#Environment_variables)
-            * [Policy](#Policy)
-        * [Build artifacts](#Build_artifacts)
-            * [Policy](#Policy)
-        * [Hardware/Software Requirements](#HardwareSoftware_Requirements)
-            * [Policies](#Policies)
-    * [References](#References)
+<!-- MACRO{toc|fromDepth=0|toDepth=3} -->
 
 Purpose
 -------
@@ -167,8 +125,8 @@ REST API compatibility corresponds to both the request (URLs) and responses to e
 * [WebHDFS](../hadoop-hdfs/WebHDFS.html) - Stable
 * [ResourceManager](../../hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html)
 * [NodeManager](../../hadoop-yarn/hadoop-yarn-site/NodeManagerRest.html)
-* [MR Application Master](../../hadoop-yarn/hadoop-yarn-site/MapredAppMasterRest.html)
-* [History Server](../../hadoop-yarn/hadoop-yarn-site/HistoryServerRest.html)
+* [MR Application Master](../../hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapredAppMasterRest.html)
+* [History Server](../../hadoop-mapreduce-client/hadoop-mapreduce-client-hs/HistoryServerRest.html)
 * [Timeline Server v1 REST API](../../hadoop-yarn/hadoop-yarn-site/TimelineServer.html)
 
 #### Policy

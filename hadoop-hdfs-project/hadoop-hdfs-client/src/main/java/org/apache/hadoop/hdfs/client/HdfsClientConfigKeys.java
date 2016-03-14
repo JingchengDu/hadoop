@@ -38,6 +38,11 @@ public interface HdfsClientConfigKeys {
   String DFS_WEBHDFS_ACL_PERMISSION_PATTERN_DEFAULT =
       "^(default:)?(user|group|mask|other):[[A-Za-z_][A-Za-z0-9._-]]*:([rwx-]{3})?(,(default:)?(user|group|mask|other):[[A-Za-z_][A-Za-z0-9._-]]*:([rwx-]{3})?)*$";
 
+  String  DFS_WEBHDFS_SOCKET_CONNECT_TIMEOUT_KEY =
+      "dfs.webhdfs.socket.connect-timeout";
+  String  DFS_WEBHDFS_SOCKET_READ_TIMEOUT_KEY =
+      "dfs.webhdfs.socket.read-timeout";
+
   String DFS_WEBHDFS_OAUTH_ENABLED_KEY = "dfs.webhdfs.oauth2.enabled";
   boolean DFS_WEBHDFS_OAUTH_ENABLED_DEFAULT = false;
 
@@ -368,6 +373,8 @@ public interface HdfsClientConfigKeys {
 
   /** dfs.client.hedged.read configuration properties */
   interface HedgedRead {
+    String PREFIX = HdfsClientConfigKeys.PREFIX + "hedged.read.";
+
     String  THRESHOLD_MILLIS_KEY = PREFIX + "threshold.millis";
     long    THRESHOLD_MILLIS_DEFAULT = 500;
     String  THREADPOOL_SIZE_KEY = PREFIX + "threadpool.size";

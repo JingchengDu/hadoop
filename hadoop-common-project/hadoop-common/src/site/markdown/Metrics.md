@@ -12,29 +12,7 @@
   limitations under the License. See accompanying LICENSE file.
 -->
 
-* [Overview](#Overview)
-* [jvm context](#jvm_context)
-    * [JvmMetrics](#JvmMetrics)
-* [rpc context](#rpc_context)
-    * [rpc](#rpc)
-    * [RetryCache/NameNodeRetryCache](#RetryCacheNameNodeRetryCache)
-* [rpcdetailed context](#rpcdetailed_context)
-    * [rpcdetailed](#rpcdetailed)
-* [dfs context](#dfs_context)
-    * [namenode](#namenode)
-    * [FSNamesystem](#FSNamesystem)
-    * [JournalNode](#JournalNode)
-    * [datanode](#datanode)
-* [yarn context](#yarn_context)
-    * [ClusterMetrics](#ClusterMetrics)
-    * [QueueMetrics](#QueueMetrics)
-    * [NodeManagerMetrics](#NodeManagerMetrics)
-* [ugi context](#ugi_context)
-    * [UgiMetrics](#UgiMetrics)
-* [metricssystem context](#metricssystem_context)
-    * [MetricsSystem](#MetricsSystem)
-* [default context](#default_context)
-    * [StartupProgress](#StartupProgress)
+<!-- MACRO{toc|fromDepth=0|toDepth=3} -->
 
 Overview
 ========
@@ -312,6 +290,10 @@ Each metrics record contains tags such as SessionId and Hostname as additional i
 | `ReplaceBlockOpAvgTime` | Average time of block replace operations in milliseconds |
 | `HeartbeatsNumOps` | Total number of heartbeats |
 | `HeartbeatsAvgTime` | Average heartbeat time in milliseconds |
+| `HeartbeatsTotalNumOps` | Total number of heartbeats which is a duplicate of HeartbeatsNumOps |
+| `HeartbeatsTotalAvgTime` | Average total heartbeat time in milliseconds |
+| `LifelinesNumOps` | Total number of lifeline messages |
+| `LifelinesAvgTime` | Average lifeline message processing time in milliseconds |
 | `BlockReportsNumOps` | Total number of block report operations |
 | `BlockReportsAvgTime` | Average time of block report operations in milliseconds |
 | `IncrementalBlockReportsNumOps` | Total number of incremental block report operations |

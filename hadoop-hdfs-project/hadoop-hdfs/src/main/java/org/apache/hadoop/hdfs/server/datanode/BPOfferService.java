@@ -120,17 +120,22 @@ class BPOfferService {
     mWriteLock.unlock();
   }
 
-  BPOfferService(List<InetSocketAddress> nnAddrs, DataNode dn) {
+  BPOfferService(List<InetSocketAddress> nnAddrs,
+      List<InetSocketAddress> lifelineNnAddrs, DataNode dn) {
     Preconditions.checkArgument(!nnAddrs.isEmpty(),
         "Must pass at least one NN.");
+    Preconditions.checkArgument(nnAddrs.size() == lifelineNnAddrs.size(),
+        "Must pass same number of NN addresses and lifeline addresses.");
     this.dn = dn;
 
-    for (InetSocketAddress addr : nnAddrs) {
-      this.bpServices.add(new BPServiceActor(addr, this));
+    for (int i = 0; i < nnAddrs.size(); ++i) {
+      this.bpServices.add(new BPServiceActor(nnAddrs.get(i),
+          lifelineNnAddrs.get(i), this));
     }
   }
 
-  void refreshNNList(ArrayList<InetSocketAddress> addrs) throws IOException {
+  void refreshNNList(ArrayList<InetSocketAddress> addrs,
+      ArrayList<InetSocketAddress> lifelineAddrs) throws IOException {
     Set<InetSocketAddress> oldAddrs = Sets.newHashSet();
     for (BPServiceActor actor : bpServices) {
       oldAddrs.add(actor.getNNSocketAddress());
@@ -233,29 +238,32 @@ class BPOfferService {
    * till namenode is informed before responding with success to the
    * client? For now we don't.
    */
-  void notifyNamenodeReceivedBlock(
-      ExtendedBlock block, String delHint, String storageUuid) {
+  void notifyNamenodeReceivedBlock(ExtendedBlock block, String delHint,
+      String storageUuid, boolean isOnTransientStorage) {
     notifyNamenodeBlock(block, BlockStatus.RECEIVED_BLOCK, delHint,
-        storageUuid);
+        storageUuid, isOnTransientStorage);
   }
 
   void notifyNamenodeReceivingBlock(ExtendedBlock block, String storageUuid) {
-    notifyNamenodeBlock(block, BlockStatus.RECEIVING_BLOCK, null, storageUuid);
+    notifyNamenodeBlock(block, BlockStatus.RECEIVING_BLOCK, null, storageUuid,
+        false);
   }
 
   void notifyNamenodeDeletedBlock(ExtendedBlock block, String storageUuid) {
-    notifyNamenodeBlock(block, BlockStatus.DELETED_BLOCK, null, storageUuid);
+    notifyNamenodeBlock(block, BlockStatus.DELETED_BLOCK, null, storageUuid,
+        false);
   }
 
   private void notifyNamenodeBlock(ExtendedBlock block, BlockStatus status,
-      String delHint, String storageUuid) {
+      String delHint, String storageUuid, boolean isOnTransientStorage) {
     checkBlock(block);
     final ReceivedDeletedBlockInfo info = new ReceivedDeletedBlockInfo(
         block.getLocalBlock(), status, delHint);
     final DatanodeStorage storage = dn.getFSDataset().getStorage(storageUuid);
 
     for (BPServiceActor actor : bpServices) {
-      actor.getIbrManager().notifyNamenodeBlock(info, storage);
+      actor.getIbrManager().notifyNamenodeBlock(info, storage,
+          isOnTransientStorage);
     }
   }
 

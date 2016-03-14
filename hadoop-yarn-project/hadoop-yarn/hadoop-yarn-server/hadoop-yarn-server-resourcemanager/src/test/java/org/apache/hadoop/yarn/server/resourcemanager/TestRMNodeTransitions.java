@@ -688,6 +688,20 @@ public class TestRMNodeTransitions {
     Assert.assertEquals(0, node.getRunningApps().size());
   }
 
+  @Test
+  public void testUnknownNodeId() {
+    NodesListManager.UnknownNodeId nodeId =
+        new NodesListManager.UnknownNodeId("host1");
+    RMNodeImpl node =
+        new RMNodeImpl(nodeId, rmContext, null, 0, 0, null, null, null);
+    rmContext.getInactiveRMNodes().putIfAbsent(nodeId,node);
+    node.handle(
+        new RMNodeEvent(node.getNodeID(), RMNodeEventType.DECOMMISSION));
+    Assert.assertNull(
+        "Must be null as there is no NODE_UNUSABLE update",
+        nodesListManagerEvent);
+  }
+
   private RMNodeImpl getRunningNode() {
     return getRunningNode(null, 0);
   }
@@ -974,5 +988,39 @@ public class TestRMNodeTransitions {
     rmNode.handle(statusEvent);
     verify(mockExpirer).unregister(expirationInfo1);
     verify(mockExpirer).unregister(expirationInfo2);
+  }
+
+  @Test
+  public void testResourceUpdateOnDecommissioningNode() {
+    RMNodeImpl node = getDecommissioningNode();
+    Resource oldCapacity = node.getTotalCapability();
+    assertEquals("Memory resource is not match.", oldCapacity.getMemory(), 4096);
+    assertEquals("CPU resource is not match.", oldCapacity.getVirtualCores(), 4);
+    node.handle(new RMNodeResourceUpdateEvent(node.getNodeID(),
+        ResourceOption.newInstance(Resource.newInstance(2048, 2),
+            ResourceOption.OVER_COMMIT_TIMEOUT_MILLIS_DEFAULT)));
+    Resource originalCapacity = node.getOriginalTotalCapability();
+    assertEquals("Memory resource is not match.", originalCapacity.getMemory(), oldCapacity.getMemory());
+    assertEquals("CPU resource is not match.", originalCapacity.getVirtualCores(), oldCapacity.getVirtualCores());
+    Resource newCapacity = node.getTotalCapability();
+    assertEquals("Memory resource is not match.", newCapacity.getMemory(), 2048);
+    assertEquals("CPU resource is not match.", newCapacity.getVirtualCores(), 2);
+
+    Assert.assertEquals(NodeState.DECOMMISSIONING, node.getState());
+    Assert.assertNotNull(nodesListManagerEvent);
+    Assert.assertEquals(NodesListManagerEventType.NODE_USABLE,
+        nodesListManagerEvent.getType());
+  }
+
+  @Test
+  public void testResourceUpdateOnRecommissioningNode() {
+    RMNodeImpl node = getDecommissioningNode();
+    Resource oldCapacity = node.getTotalCapability();
+    assertEquals("Memory resource is not match.", oldCapacity.getMemory(), 4096);
+    assertEquals("CPU resource is not match.", oldCapacity.getVirtualCores(), 4);
+    node.handle(new RMNodeEvent(node.getNodeID(),
+        RMNodeEventType.RECOMMISSION));
+    Resource originalCapacity = node.getOriginalTotalCapability();
+    assertEquals("Original total capability not null after recommission", null, originalCapacity);
   }
 }

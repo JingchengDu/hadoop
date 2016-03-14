@@ -343,6 +343,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
                 <includes>
                   <include>HdfsServer.proto</include>
                   <include>DatanodeProtocol.proto</include>
+                  <include>DatanodeLifelineProtocol.proto</include>
                   <include>HAZKInfo.proto</include>
                   <include>InterDatanodeProtocol.proto</include>
                   <include>JournalProtocol.proto</include>
@@ -369,9 +370,6 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
         <artifactId>apache-rat-plugin</artifactId>
         <configuration>
           <excludes>
-            <exclude>CHANGES.txt</exclude>
-            <exclude>CHANGES.HDFS-1623.txt</exclude>
-            <exclude>CHANGES.HDFS-347.txt</exclude>
             <exclude>.gitattributes</exclude>
             <exclude>.idea/**</exclude>
             <exclude>src/main/conf/*</exclude>

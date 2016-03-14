@@ -19,8 +19,9 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.MAX_PATH_DEPTH;
@@ -42,7 +43,6 @@ import com.google.common.collect.Lists;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.conf.ReconfigurationException;
 import org.apache.hadoop.conf.ReconfigurationTaskStatus;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
@@ -111,11 +111,14 @@ import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocol.UnregisteredNodeException;
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol;
+import org.apache.hadoop.hdfs.protocol.proto.DatanodeLifelineProtocolProtos.DatanodeLifelineProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.DatanodeProtocolProtos.DatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.NamenodeProtocolProtos.NamenodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ReconfigurationProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolServerSideTranslatorPB;
+import org.apache.hadoop.hdfs.protocolPB.DatanodeLifelineProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.DatanodeLifelineProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
@@ -256,6 +259,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     BlockingService dnProtoPbService = DatanodeProtocolService
         .newReflectiveBlockingService(dnProtoPbTranslator);
 
+    DatanodeLifelineProtocolServerSideTranslatorPB lifelineProtoPbTranslator =
+        new DatanodeLifelineProtocolServerSideTranslatorPB(this);
+    BlockingService lifelineProtoPbService = DatanodeLifelineProtocolService
+        .newReflectiveBlockingService(lifelineProtoPbTranslator);
+
     NamenodeProtocolServerSideTranslatorPB namenodeProtocolXlator = 
         new NamenodeProtocolServerSideTranslatorPB(this);
     BlockingService NNPbService = NamenodeProtocolService
@@ -371,9 +379,14 @@ class NameNodeRpcServer implements NamenodeProtocols {
           lifelineRpcAddr.getPort());
 
       int lifelineHandlerCount = conf.getInt(
-          DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY,
-          DFS_NAMENODE_LIFELINE_HANDLER_COUNT_DEFAULT);
-
+          DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY, 0);
+      if (lifelineHandlerCount <= 0) {
+        float lifelineHandlerRatio = conf.getFloat(
+            DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY,
+            DFS_NAMENODE_LIFELINE_HANDLER_RATIO_DEFAULT);
+        lifelineHandlerCount = Math.max(
+            (int)(handlerCount * lifelineHandlerRatio), 1);
+      }
       lifelineRpcServer = new RPC.Builder(conf)
           .setProtocol(HAServiceProtocolPB.class)
           .setInstance(haPbService)
@@ -383,6 +396,9 @@ class NameNodeRpcServer implements NamenodeProtocols {
           .setVerbose(false)
           .setSecretManager(namesystem.getDelegationTokenSecretManager())
           .build();
+
+      DFSUtil.addPBProtocol(conf, DatanodeLifelineProtocolPB.class,
+          lifelineProtoPbService, lifelineRpcServer);
 
       // Update the address with the correct port
       InetSocketAddress listenAddr = lifelineRpcServer.getListenerAddress();
@@ -768,6 +784,13 @@ class NameNodeRpcServer implements NamenodeProtocols {
     throws IOException {
     checkNNStartup();
     return namesystem.setReplication(src, replication);
+  }
+
+  @Override
+  public void unsetStoragePolicy(String src)
+      throws IOException {
+    checkNNStartup();
+    namesystem.unsetStoragePolicy(src);
   }
 
   @Override
@@ -1502,6 +1525,17 @@ class NameNodeRpcServer implements NamenodeProtocols {
     return namesystem.getNamespaceInfo();
   }
 
+  @Override // DatanodeLifelineProtocol
+  public void sendLifeline(DatanodeRegistration nodeReg, StorageReport[] report,
+      long dnCacheCapacity, long dnCacheUsed, int xmitsInProgress,
+      int xceiverCount, int failedVolumes,
+      VolumeFailureSummary volumeFailureSummary) throws IOException {
+    checkNNStartup();
+    verifyRequest(nodeReg);
+    namesystem.handleLifeline(nodeReg, report, dnCacheCapacity, dnCacheUsed,
+        xceiverCount, xmitsInProgress, failedVolumes, volumeFailureSummary);
+  }
+
   /** 
    * Verifies the given registration.
    * 
@@ -2074,7 +2108,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
     checkNNStartup();
     namesystem.checkOperation(OperationCategory.READ); // only active
     namesystem.checkSuperuserPrivilege();
-    int maxEventsPerRPC = nn.conf.getInt(
+    int maxEventsPerRPC = nn.getConf().getInt(
         DFSConfigKeys.DFS_NAMENODE_INOTIFY_MAX_EVENTS_PER_RPC_KEY,
         DFSConfigKeys.DFS_NAMENODE_INOTIFY_MAX_EVENTS_PER_RPC_DEFAULT);
     FSEditLog log = namesystem.getFSImage().getEditLog();
@@ -2189,23 +2223,24 @@ class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override // ReconfigurationProtocol
-  public void startReconfiguration() {
-    throw new UnsupportedOperationException(
-        "Namenode startReconfiguration is not implemented.",
-        new ReconfigurationException());
+  public void startReconfiguration() throws IOException {
+    checkNNStartup();
+    namesystem.checkSuperuserPrivilege();
+    nn.startReconfigurationTask();
   }
 
   @Override // ReconfigurationProtocol
-  public ReconfigurationTaskStatus getReconfigurationStatus() {
-    throw new UnsupportedOperationException(
-        " Namenode getReconfigurationStatus is not implemented.",
-        new ReconfigurationException());
+  public ReconfigurationTaskStatus getReconfigurationStatus()
+      throws IOException {
+    checkNNStartup();
+    namesystem.checkSuperuserPrivilege();
+    return nn.getReconfigurationTaskStatus();
   }
 
   @Override // ReconfigurationProtocol
-  public List<String> listReconfigurableProperties() {
-    throw new UnsupportedOperationException(
-        " Namenode listReconfigurableProperties is not implemented.",
-        new ReconfigurationException());
+  public List<String> listReconfigurableProperties() throws IOException {
+    checkNNStartup();
+    namesystem.checkSuperuserPrivilege();
+    return NameNode.RECONFIGURABLE_PROPERTIES;
   }
 }

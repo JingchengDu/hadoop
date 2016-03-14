@@ -43,6 +43,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerResourceChangeRequest;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
@@ -70,6 +71,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeResourceUpdateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
@@ -887,7 +889,7 @@ public class FairScheduler extends
     } else {
       nodesPerRack.put(rackName, 1);
     }
-    Resources.addTo(clusterResource, node.getTotalCapability());
+    Resources.addTo(clusterResource, schedulerNode.getTotalResource());
     updateMaximumAllocation(schedulerNode, true);
 
     triggerUpdate();
@@ -907,7 +909,7 @@ public class FairScheduler extends
     if (node == null) {
       return;
     }
-    Resources.subtractFrom(clusterResource, rmNode.getTotalCapability());
+    Resources.subtractFrom(clusterResource, node.getTotalResource());
     updateRootQueueMetrics();
 
     triggerUpdate();
@@ -1057,6 +1059,19 @@ public class FairScheduler extends
           completedContainer, RMContainerEventType.FINISHED);
     }
 
+    // If the node is decommissioning, send an update to have the total
+    // resource equal to the used resource, so no available resource to
+    // schedule.
+    if (nm.getState() == NodeState.DECOMMISSIONING) {
+      this.rmContext
+          .getDispatcher()
+          .getEventHandler()
+          .handle(
+              new RMNodeResourceUpdateEvent(nm.getNodeID(), ResourceOption
+                  .newInstance(getSchedulerNode(nm.getNodeID())
+                      .getAllocatedResource(), 0)));
+    }
+
     if (continuousSchedulingEnabled) {
       if (!completedContainers.isEmpty()) {
         attemptScheduling(node);
@@ -1090,7 +1105,7 @@ public class FairScheduler extends
       FSSchedulerNode node = getFSSchedulerNode(nodeId);
       try {
         if (node != null && Resources.fitsIn(minimumAllocation,
-            node.getAvailableResource())) {
+            node.getUnallocatedResource())) {
           attemptScheduling(node);
         }
       } catch (Throwable ex) {
@@ -1122,8 +1137,8 @@ public class FairScheduler extends
         return -1;
       }
       return RESOURCE_CALCULATOR.compare(clusterResource,
-              nodes.get(n2).getAvailableResource(),
-              nodes.get(n1).getAvailableResource());
+              nodes.get(n2).getUnallocatedResource(),
+              nodes.get(n1).getUnallocatedResource());
     }
   }
 

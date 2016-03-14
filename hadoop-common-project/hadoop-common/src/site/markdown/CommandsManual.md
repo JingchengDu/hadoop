@@ -12,35 +12,10 @@
   limitations under the License. See accompanying LICENSE file.
 -->
 
-* [Hadoop Commands Guide](#Hadoop_Commands_Guide)
-    * [Overview](#Overview)
-        * [Shell Options](#Shell_Options)
-        * [Generic Options](#Generic_Options)
-* [Hadoop Common Commands](#Hadoop_Common_Commands)
-    * [User Commands](#User_Commands)
-        * [archive](#archive)
-        * [checknative](#checknative)
-        * [classpath](#classpath)
-        * [credential](#credential)
-        * [distch](#distch)
-        * [distcp](#distcp)
-        * [fs](#fs)
-        * [jar](#jar)
-        * [jnipath](#jnipath)
-        * [kerbname](#kerbname)
-        * [key](#key)
-        * [trace](#trace)
-        * [version](#version)
-        * [CLASSNAME](#CLASSNAME)
-    * [Administration Commands](#Administration_Commands)
-        * [daemonlog](#daemonlog)
-    * [Files](#Files)
-        * [etc/hadoop/hadoop-env.sh](#etchadoophadoop-env.sh)
-        * [etc/hadoop/hadoop-user-functions.sh](#etchadoophadoop-user-functions.sh)
-        * [~/.hadooprc](#a.hadooprc)
-
 Hadoop Commands Guide
 =====================
+
+<!-- MACRO{toc|fromDepth=0|toDepth=3} -->
 
 Overview
 --------
@@ -89,7 +64,7 @@ Many subcommands honor a common set of configuration options to alter their beha
 Hadoop Common Commands
 ======================
 
-All of these commands are executed from the `hadoop` shell command. They have been broken up into [User Commands](#User_Commands) and [Admininistration Commands](#Admininistration_Commands).
+All of these commands are executed from the `hadoop` shell command. They have been broken up into [User Commands](#User_Commands) and [Administration Commands](#Administration_Commands).
 
 User Commands
 -------------
@@ -109,7 +84,7 @@ Usage: `hadoop checknative [-a] [-h] `
 | `-a` | Check all libraries are available. |
 | `-h` | print help |
 
-This command checks the availability of the Hadoop native code. See [\#NativeLibraries.html](#NativeLibraries.html) for more information. By default, this command only checks the availability of libhadoop.
+This command checks the availability of the Hadoop native code. See [Native Libaries](./NativeLibraries.html) for more information. By default, this command only checks the availability of libhadoop.
 
 ### `classpath`
 

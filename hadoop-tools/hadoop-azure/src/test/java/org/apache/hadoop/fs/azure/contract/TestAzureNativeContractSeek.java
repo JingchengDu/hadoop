@@ -15,23 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.io.erasurecode.rawcoder;
 
-import org.apache.hadoop.classification.InterfaceAudience;
+package org.apache.hadoop.fs.azure.contract;
 
-/**
- * A raw coder factory for raw Reed-Solomon coder in Java.
- */
-@InterfaceAudience.Private
-public class RSRawErasureCoderFactory implements RawErasureCoderFactory {
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.contract.AbstractContractSeekTest;
+import org.apache.hadoop.fs.contract.AbstractFSContract;
 
+public class TestAzureNativeContractSeek extends AbstractContractSeekTest{
   @Override
-  public RawErasureEncoder createEncoder(int numDataUnits, int numParityUnits) {
-    return new RSRawEncoder(numDataUnits, numParityUnits);
-  }
-
-  @Override
-  public RawErasureDecoder createDecoder(int numDataUnits, int numParityUnits) {
-    return new RSRawDecoder(numDataUnits, numParityUnits);
+  protected AbstractFSContract createContract(Configuration conf) {
+    return new NativeAzureFileSystemContract(conf);
   }
 }
