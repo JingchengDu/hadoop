@@ -1360,7 +1360,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized Replica recoverClose(ExtendedBlock b, long newGS,
+  public Replica recoverClose(ExtendedBlock b, long newGS,
       long expectedBlockLen) throws IOException {
     LOG.info("Recover failed close " + b);
     volumeOpLock.readLock().lock();
@@ -1375,7 +1375,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         if (replicaInfo.getState() == ReplicaState.RBW) {
           finalizeReplica(b.getBlockPoolId(), replicaInfo);
         }
-    return replicaInfo;
+        return replicaInfo;
       }
     } finally {
       volumeOpLock.readLock().unlock();
@@ -2617,7 +2617,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized Replica updateReplicaUnderRecovery(
+  public Replica updateReplicaUnderRecovery(
                                     final ExtendedBlock oldBlock,
                                     final long recoveryId,
                                     final long newBlockId,
@@ -2681,7 +2681,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         //check replica files after update
         checkReplicaFiles(finalized);
 
-    return finalized;
+        return finalized;
       }
     } finally {
       volumeOpLock.readLock().unlock();
