@@ -135,6 +135,27 @@ class ReplicaMap {
   }
 
   /**
+   * Add a replica's meta information into the map
+   * 
+   * @param bpid block pool id
+   * @param replicaInfo a replica's meta information
+   * @return previous meta information of the replica. It returns null if the block pool
+   *         does not exist.
+   * @throws IllegalArgumentException if the input parameter is null
+   */
+  ReplicaInfo addToExistingBlockPool(String bpid, ReplicaInfo replicaInfo) {
+    checkBlockPool(bpid);
+    checkBlock(replicaInfo);
+    synchronized(mutex) {
+      FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
+      if (set == null) {
+        return null;
+      }
+      return set.addOrReplace(replicaInfo);
+    }
+  }
+
+  /**
    * Add all entries from the given replica map into the local replica map.
    */
   void addAll(ReplicaMap other) {
