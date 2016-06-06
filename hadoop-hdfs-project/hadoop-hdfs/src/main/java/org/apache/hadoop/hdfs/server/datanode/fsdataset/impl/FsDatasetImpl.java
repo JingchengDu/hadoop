@@ -1431,7 +1431,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
 
     synchronized (this) {
-      ReplicaBeingWritten newReplicaInfo = new ReplicaBeingWritten(b.getBlockId(), 
+      ReplicaBeingWritten newReplicaInfo = new ReplicaBeingWritten(b.getBlockId(),
           b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
       volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
       return new ReplicaHandler(newReplicaInfo, ref);
