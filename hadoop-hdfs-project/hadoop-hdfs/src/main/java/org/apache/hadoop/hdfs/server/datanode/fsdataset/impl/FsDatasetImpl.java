@@ -1304,6 +1304,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public Replica recoverClose(ExtendedBlock b, long newGS,
       long expectedBlockLen) throws IOException {
     LOG.info("Recover failed close " + b);
+    long mstart = System.nanoTime();
     while (true) {
       try {
         FsVolumeImpl v = null;
@@ -1322,6 +1323,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
               FinalizedReplica newReplicaInfo = (FinalizedReplica)
                     ((ReplicaUnderRecovery)replicaInfo).getOriginalReplica();
               volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
+              long mend = System.nanoTime();
+              LOG.info("===recoverClose_method===" + (mend - mstart));
               return replicaInfo;
            } else {
              v = (FsVolumeImpl)replicaInfo.getVolume();
@@ -1332,12 +1335,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
              }
            }
           } else {
+            long mend = System.nanoTime();
+            LOG.info("===recoverClose_method===" + (mend - mstart));
             return replicaInfo;
           }
         }
         String bpid = b.getBlockPoolId();
         File dest = v.addFinalizedBlock(bpid, replicaInfo, f, replicaInfo.getBytesReserved());
-        finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime());
+        finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime(), "===recoverClose-wait===");
+        long mend = System.nanoTime();
+        LOG.info("===recoverClose_method===" + (mend - mstart));
         return replicaInfo;
       } catch (MustStopExistingWriter e) {
         e.getReplica().stopWriter(datanode.getDnConf().getXceiverStopTimeout());
@@ -1381,6 +1388,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     FsVolumeImpl v = null;
     // create a new block
     FsVolumeReference ref = null;
+    long mstart = System.nanoTime();
     synchronized (this) {
       ReplicaInfo replicaInfo = volumeMap.get(b.getBlockPoolId(),
         b.getBlockId());
@@ -1437,6 +1445,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       ReplicaBeingWritten newReplicaInfo = new ReplicaBeingWritten(b.getBlockId(),
           b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
       volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
+      long mend = System.nanoTime();
+      LOG.info("===createRbw_method===" + (mend - mstart));
       return new ReplicaHandler(newReplicaInfo, ref);
     }
   }
@@ -1581,6 +1591,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     long startTimeMs = Time.monotonicNow();
     long writerStopTimeoutMs = datanode.getDnConf().getXceiverStopTimeout();
     ReplicaInfo lastFoundReplicaInfo = null;
+    long mstart = System.nanoTime();
     do {
       FsVolumeImpl v = null;
       FsVolumeReference ref = null;
@@ -1621,6 +1632,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             new ReplicaInPipeline(b.getBlockId(), b.getGenerationStamp(), v,
                 f.getParentFile(), b.getLocalBlock().getNumBytes());
           volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
+          long mend = System.nanoTime();
+          LOG.info("===createTemporary_method===" + (mend - mstart));
           return new ReplicaHandler(newReplicaInfo, ref);
         }
       }
@@ -1674,6 +1687,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     FsVolumeImpl v;
     ReplicaInfo replicaInfo;
     File f;
+    long mstart = System.nanoTime();
     synchronized (this) {
       if (Thread.interrupted()) {
         // Don't allow data modifications from interrupted threads
@@ -1705,7 +1719,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     String bpid = b.getBlockPoolId();
     File dest = v.addFinalizedBlock(
       bpid, replicaInfo, f, replicaInfo.getBytesReserved());
-    finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime());
+    finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime(), "===finalizeBlock-wait===");
+    long mend = System.nanoTime();
+    LOG.info("===finalizeBlock_method===" + (mend - mstart));
   }
   
   private synchronized FinalizedReplica finalizeReplica(String bpid,
@@ -1743,9 +1759,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   private synchronized FinalizedReplica finalizeReplica(FsVolumeImpl v, File dest, String bpid,
-    ReplicaInfo replicaInfo, long start) throws IOException {
+    ReplicaInfo replicaInfo, long start, String desc) throws IOException {
     long end = System.nanoTime();
-    LOG.info("===finalizeReplica-Wait===" + (end - start));
+    LOG.info("desc" + (end - start));
     FinalizedReplica newReplicaInfo = new FinalizedReplica(replicaInfo, v, dest.getParentFile());
 
     if (v.isTransientStorage()) {
