@@ -1337,7 +1337,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         }
         String bpid = b.getBlockPoolId();
         File dest = v.addFinalizedBlock(bpid, replicaInfo, f, replicaInfo.getBytesReserved());
-        finalizeReplica(v, dest, bpid, replicaInfo);
+        finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime());
         return replicaInfo;
       } catch (MustStopExistingWriter e) {
         e.getReplica().stopWriter(datanode.getDnConf().getXceiverStopTimeout());
@@ -1430,7 +1430,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       throw e;
     }
 
+    long start = System.nanoTime();
     synchronized (this) {
+      long end = System.nanoTime();
+      LOG.info("===createRbw-Wait===" + (end - start));
       ReplicaBeingWritten newReplicaInfo = new ReplicaBeingWritten(b.getBlockId(),
           b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
       volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
@@ -1610,7 +1613,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           IOUtils.cleanup(null, ref);
           throw e;
         }
+        long start = System.nanoTime();
         synchronized (this) {
+          long end = System.nanoTime();
+          LOG.info("===createTemporary-Wait===" + (end - start));
           ReplicaInPipeline newReplicaInfo =
             new ReplicaInPipeline(b.getBlockId(), b.getGenerationStamp(), v,
                 f.getParentFile(), b.getLocalBlock().getNumBytes());
@@ -1699,7 +1705,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     String bpid = b.getBlockPoolId();
     File dest = v.addFinalizedBlock(
       bpid, replicaInfo, f, replicaInfo.getBytesReserved());
-    finalizeReplica(v, dest, bpid, replicaInfo);
+    finalizeReplica(v, dest, bpid, replicaInfo, System.nanoTime());
   }
   
   private synchronized FinalizedReplica finalizeReplica(String bpid,
@@ -1737,7 +1743,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   private synchronized FinalizedReplica finalizeReplica(FsVolumeImpl v, File dest, String bpid,
-    ReplicaInfo replicaInfo) throws IOException {
+    ReplicaInfo replicaInfo, long start) throws IOException {
+    long end = System.nanoTime();
+    LOG.info("===finalizeReplica-Wait===" + (end - start));
     FinalizedReplica newReplicaInfo = new FinalizedReplica(replicaInfo, v, dest.getParentFile());
 
     if (v.isTransientStorage()) {
