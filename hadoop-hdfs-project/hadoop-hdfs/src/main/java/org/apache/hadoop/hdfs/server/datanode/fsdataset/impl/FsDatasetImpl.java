@@ -1317,7 +1317,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             finalizeReplica(b.getBlockPoolId(), replicaInfo);
           }
           long mend = System.nanoTime();
-          LOG.info("===recoverClose_method===" + (mend - mstart));
+          LOG.info("[[[recoverClose_method]]]" + (mend - mstart));
           return replicaInfo;
         }
       } catch (MustStopExistingWriter e) {
@@ -1414,7 +1414,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
       volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
       long mend = System.nanoTime();
-      LOG.info("===createRbw_method===" + (mend - mstart));
+      LOG.info("[[[createRbw_method]]]" + (mend - mstart));
       return new ReplicaHandler(newReplicaInfo, ref);
     }
   }
@@ -1584,7 +1584,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                   f.getParentFile(), b.getLocalBlock().getNumBytes());
           volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
           long mend = System.nanoTime();
-          LOG.info("===createTemporary_method===" + (mend - mstart));
+          LOG.info("[[[createTemporary_method]]]" + (mend - mstart));
           return new ReplicaHandler(newReplicaInfo, ref);
         } else {
           if (!(currentReplicaInfo.getGenerationStamp() < b
@@ -1731,7 +1731,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
       volumeMap.add(bpid, newReplicaInfo);
       long mend = System.nanoTime();
-      LOG.info("===finalizeBlock_method===" + (mend - mstart));
+      LOG.info("[[[finalizeBlock_method]]]" + (mend - mstart));
       return newReplicaInfo;
     }
   }
