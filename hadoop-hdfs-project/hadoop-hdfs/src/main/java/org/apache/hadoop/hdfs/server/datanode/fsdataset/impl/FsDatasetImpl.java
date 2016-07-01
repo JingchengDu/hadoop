@@ -1341,13 +1341,15 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           }
         }
         String bpid = b.getBlockPoolId();
+        long dstart = System.nanoTime();
         File dest = v.addFinalizedBlock(bpid, replicaInfo, f, replicaInfo.getBytesReserved());
+        long dend = System.nanoTime();
         TimeHolder holder = new TimeHolder();
         long start = System.nanoTime();
         finalizeReplica(v, dest, bpid, replicaInfo, holder);
         long mend = System.nanoTime();
         LOG.info("===recoverClose_method===" + (mend - mstart) + "===wait==="
-          + (holder.time - start));
+          + (holder.time - start) + "===disk===" + (dend - dstart));
         return replicaInfo;
       } catch (MustStopExistingWriter e) {
         e.getReplica().stopWriter(datanode.getDnConf().getXceiverStopTimeout());
@@ -1433,6 +1435,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
     }
 
+    long dstart = System.nanoTime();
     File f;
     try {
       f = v.createRbwFile(b.getBlockPoolId(), b.getLocalBlock());
@@ -1448,7 +1451,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
       volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
       long mend = System.nanoTime();
-      LOG.info("===createRbw_method===" + (mend - mstart) + "===wait===" + (end - start));
+      LOG.info("===createRbw_method===" + (mend - mstart) + "===wait===" + (end - start) +
+        "===disk===" + (start - dstart));
       return new ReplicaHandler(newReplicaInfo, ref);
     }
   }
@@ -1619,6 +1623,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
       if (v != null) {
         // create a temporary file to hold block in the designated volume
+        long dstart = System.nanoTime();
         File f;
         try {
           f = v.createTmpFile(b.getBlockPoolId(), b.getLocalBlock());
@@ -1634,7 +1639,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                 f.getParentFile(), b.getLocalBlock().getNumBytes());
           volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
           long mend = System.nanoTime();
-          LOG.info("===createTemporary_method===" + (mend - mstart) + "===wait===" + (end - start));
+          LOG.info("===createTemporary_method===" + (mend - mstart) + "===wait===" + (end - start) +
+            "===disk===" + (start - dstart));
           return new ReplicaHandler(newReplicaInfo, ref);
         }
       }
@@ -1718,13 +1724,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
      }
     }
     String bpid = b.getBlockPoolId();
+    long dstart = System.nanoTime();
     File dest = v.addFinalizedBlock(
       bpid, replicaInfo, f, replicaInfo.getBytesReserved());
+    long dend = System.nanoTime();
     TimeHolder holder = new TimeHolder();
     long start = System.nanoTime();
     finalizeReplica(v, dest, bpid, replicaInfo, holder);
     long mend = System.nanoTime();
-    LOG.info("===finalizeBlock_method===" + (mend - mstart) + "===wait===" + (holder.time - start));
+    LOG.info("===finalizeBlock_method===" + (mend - mstart) + "===wait===" + (holder.time - start)+
+      "===disk===" + (dend - dstart));
   }
   
   private synchronized FinalizedReplica finalizeReplica(String bpid,
