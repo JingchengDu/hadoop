@@ -26,8 +26,10 @@ import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
 import org.apache.hadoop.yarn.api.records.AMCommand;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
+import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerRetryPolicy;
 import org.apache.hadoop.yarn.api.records.ContainerState;
+import org.apache.hadoop.yarn.api.records.ExecutionTypeRequest;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.LocalResourceType;
@@ -60,6 +62,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos.YarnApplicationStateProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerRetryPolicyProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerTypeProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ExecutionTypeProto;
+import org.apache.hadoop.yarn.proto.YarnProtos.ExecutionTypeRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos;
 import org.apache.hadoop.yarn.server.api.ContainerType;
 
@@ -323,5 +326,31 @@ public class ProtoUtils {
   public static ContainerRetryPolicy convertFromProtoFormat(
       ContainerRetryPolicyProto e) {
     return ContainerRetryPolicy.valueOf(e.name());
+  }
+
+  /*
+   * ExecutionTypeRequest
+   */
+  public static ExecutionTypeRequestProto convertToProtoFormat(
+      ExecutionTypeRequest e) {
+    return ((ExecutionTypeRequestPBImpl)e).getProto();
+  }
+
+  public static ExecutionTypeRequest convertFromProtoFormat(
+      ExecutionTypeRequestProto e) {
+    return new ExecutionTypeRequestPBImpl(e);
+  }
+
+  /*
+   * Container
+   */
+  public static YarnProtos.ContainerProto convertToProtoFormat(
+      Container t) {
+    return ((ContainerPBImpl)t).getProto();
+  }
+
+  public static ContainerStatusPBImpl convertFromProtoFormat(
+      YarnProtos.ContainerStatusProto p) {
+    return new ContainerStatusPBImpl(p);
   }
 }

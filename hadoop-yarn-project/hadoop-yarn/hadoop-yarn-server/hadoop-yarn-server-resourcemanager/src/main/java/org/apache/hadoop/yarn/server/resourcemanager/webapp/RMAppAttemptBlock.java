@@ -40,6 +40,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ResourceRequestInfo;
 import org.apache.hadoop.yarn.server.webapp.AppAttemptBlock;
 import org.apache.hadoop.yarn.server.webapp.dao.AppAttemptInfo;
 import org.apache.hadoop.yarn.util.Times;
@@ -71,7 +72,7 @@ public class RMAppAttemptBlock extends AppAttemptBlock{
           .get(this.appAttemptId.getApplicationId()), true,
           WebAppUtils.getHttpSchemePrefix(conf));
 
-    List<ResourceRequest> resourceRequests = app.getResourceRequests();
+    List<ResourceRequestInfo> resourceRequests = app.getResourceRequests();
     if (resourceRequests == null || resourceRequests.isEmpty()) {
       return;
     }
@@ -88,7 +89,7 @@ public class RMAppAttemptBlock extends AppAttemptBlock{
         .th(".labelexpression", "NodeLabelExpression")._()._().tbody();
 
     StringBuilder resourceRequestTableData = new StringBuilder("[\n");
-    for (ResourceRequest resourceRequest : resourceRequests) {
+    for (ResourceRequestInfo resourceRequest  : resourceRequests) {
       if (resourceRequest.getNumContainers() == 0) {
         continue;
       }
@@ -118,19 +119,19 @@ public class RMAppAttemptBlock extends AppAttemptBlock{
     div._();
   }
 
-  private Resource getTotalResource(List<ResourceRequest> requests) {
+  private Resource getTotalResource(List<ResourceRequestInfo> requests) {
     Resource totalResource = Resource.newInstance(0, 0);
     if (requests == null) {
       return totalResource;
     }
-    for (ResourceRequest request : requests) {
+    for (ResourceRequestInfo request : requests) {
       if (request.getNumContainers() == 0) {
         continue;
       }
       if (request.getResourceName().equals(ResourceRequest.ANY)) {
         Resources.addTo(
-          totalResource,
-          Resources.multiply(request.getCapability(),
+            totalResource,
+            Resources.multiply(request.getCapability().getResource(),
             request.getNumContainers()));
       }
     }
@@ -220,8 +221,9 @@ public class RMAppAttemptBlock extends AppAttemptBlock{
     String appBlacklistedNodes =
         getNodeString(rmAppAttempt.getBlacklistedNodes());
     // nodes which are blacklisted by the RM for AM launches
-    String rmBlackListedNodes = getNodeString(
-        rmAppAttempt.getAMBlacklist().getBlacklistUpdates().getAdditions());
+    String rmBlackListedNodes =
+        getNodeString(rmAppAttempt.getAMBlacklistManager()
+          .getBlacklistUpdates().getBlacklistAdditions());
 
     info("Application Attempt Overview")
       ._(
@@ -256,8 +258,8 @@ public class RMAppAttemptBlock extends AppAttemptBlock{
         "Diagnostics Info:",
         appAttempt.getDiagnosticsInfo() == null ? "" : appAttempt
           .getDiagnosticsInfo())
-      ._("Application Blacklisted Nodes:", appBlacklistedNodes)
-      ._("RM Blacklisted Nodes(for AM launches)", rmBlackListedNodes);
+      ._("Nodes blacklisted by the application:", appBlacklistedNodes)
+      ._("Nodes blacklisted by the system:", rmBlackListedNodes);
   }
 
   private String getNodeString(Collection<String> nodes) {

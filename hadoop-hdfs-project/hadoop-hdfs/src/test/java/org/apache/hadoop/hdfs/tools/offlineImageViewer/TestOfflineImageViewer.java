@@ -17,6 +17,14 @@
  */
 package org.apache.hadoop.hdfs.tools.offlineImageViewer;
 
+import static org.apache.hadoop.fs.permission.AclEntryScope.ACCESS;
+import static org.apache.hadoop.fs.permission.AclEntryType.GROUP;
+import static org.apache.hadoop.fs.permission.AclEntryType.OTHER;
+import static org.apache.hadoop.fs.permission.AclEntryType.USER;
+import static org.apache.hadoop.fs.permission.FsAction.ALL;
+import static org.apache.hadoop.fs.permission.FsAction.EXECUTE;
+import static org.apache.hadoop.fs.permission.FsAction.READ_EXECUTE;
+import static org.apache.hadoop.hdfs.server.namenode.AclTestHelpers.aclEntry;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -49,6 +57,7 @@ import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
 import com.google.common.io.Files;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
@@ -61,6 +70,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
@@ -82,6 +92,7 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class TestOfflineImageViewer {
@@ -113,6 +124,7 @@ public class TestOfflineImageViewer {
           DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_KEY, 5000);
       conf.setBoolean(
           DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY, true);
+      conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
       conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTH_TO_LOCAL,
           "RULE:[2:$1@$0](JobTracker@.*FOO.COM)s/@.*//" + "DEFAULT");
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
@@ -179,6 +191,14 @@ public class TestOfflineImageViewer {
       // as UTF8
       hdfs.setXAttr(xattr, "user.a4", new byte[]{ -0x3d, 0x28 });
       writtenFiles.put(xattr.toString(), hdfs.getFileStatus(xattr));
+      // Set ACLs
+      hdfs.setAcl(
+          xattr,
+          Lists.newArrayList(aclEntry(ACCESS, USER, ALL),
+              aclEntry(ACCESS, USER, "foo", ALL),
+              aclEntry(ACCESS, GROUP, READ_EXECUTE),
+              aclEntry(ACCESS, GROUP, "bar", READ_EXECUTE),
+              aclEntry(ACCESS, OTHER, EXECUTE)));
 
       // Write results to the fsimage file
       hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER, false);
@@ -532,5 +552,53 @@ public class TestOfflineImageViewer {
     } catch (Throwable t) {
       GenericTestUtils.assertExceptionContains("Layout version mismatch.", t);
     }
+  }
+
+  @Test
+  public void testFileDistributionCalculatorForException() throws Exception {
+    File fsimageFile = null;
+    Configuration conf = new Configuration();
+    HashMap<String, FileStatus> files = Maps.newHashMap();
+
+    // Create a initial fsimage file
+    try (MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build()) {
+      cluster.waitActive();
+      DistributedFileSystem hdfs = cluster.getFileSystem();
+
+      // Create a reasonable namespace
+      Path dir = new Path("/dir");
+      hdfs.mkdirs(dir);
+      files.put(dir.toString(), pathToFileEntry(hdfs, dir.toString()));
+      // Create files with byte size that can't be divided by step size,
+      // the byte size for here are 3, 9, 15, 21.
+      for (int i = 0; i < FILES_PER_DIR; i++) {
+        Path file = new Path(dir, "file" + i);
+        DFSTestUtil.createFile(hdfs, file, 6 * i + 3, (short) 1, 0);
+
+        files.put(file.toString(),
+            pathToFileEntry(hdfs, file.toString()));
+      }
+
+      // Write results to the fsimage file
+      hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER, false);
+      hdfs.saveNamespace();
+      // Determine location of fsimage file
+      fsimageFile =
+          FSImageTestUtil.findLatestImageFile(FSImageTestUtil
+              .getFSImage(cluster.getNameNode()).getStorage().getStorageDir(0));
+      if (fsimageFile == null) {
+        throw new RuntimeException("Didn't generate or can't find fsimage");
+      }
+    }
+
+    // Run the test with params -maxSize 23 and -step 4, it will not throw
+    // ArrayIndexOutOfBoundsException with index 6 when deals with
+    // 21 byte size file.
+    int status =
+        OfflineImageViewerPB.run(new String[] {"-i",
+            fsimageFile.getAbsolutePath(), "-o", "-", "-p",
+            "FileDistribution", "-maxSize", "23", "-step", "4"});
+    assertEquals(0, status);
   }
 }

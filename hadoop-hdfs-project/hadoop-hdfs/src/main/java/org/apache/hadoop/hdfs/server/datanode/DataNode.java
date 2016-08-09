@@ -71,7 +71,6 @@ import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,6 +95,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.ObjectName;
+import javax.net.SocketFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -169,6 +169,8 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
 import org.apache.hadoop.hdfs.server.datanode.web.DatanodeHttpServer;
+import org.apache.hadoop.hdfs.server.diskbalancer.DiskBalancerConstants;
+import org.apache.hadoop.hdfs.server.diskbalancer.DiskBalancerException;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
@@ -385,6 +387,10 @@ public class DataNode extends ReconfigurableBase
   private static final int NUM_CORES = Runtime.getRuntime()
       .availableProcessors();
   private static final double CONGESTION_RATIO = 1.5;
+  private DiskBalancer diskBalancer;
+
+
+  private final SocketFactory socketFactory;
 
   private static Tracer createTracer(Configuration conf) {
     return new Tracer.Builder("DataNode").
@@ -415,6 +421,7 @@ public class DataNode extends ReconfigurableBase
     this.pipelineSupportECN = false;
     this.checkDiskErrorInterval =
         ThreadLocalRandom.current().nextInt(5000, (int) (5000 * 1.25));
+    this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
     initOOBTimeout();
   }
 
@@ -472,6 +479,8 @@ public class DataNode extends ReconfigurableBase
           "File descriptor passing was not configured.";
       LOG.debug(this.fileDescriptorPassingDisabledReason);
     }
+
+    this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
 
     try {
       hostName = getHostName(conf);
@@ -625,7 +634,7 @@ public class DataNode extends ReconfigurableBase
    * @param newVolumes a comma separated string that specifies the data volumes.
    * @return changed volumes.
    * @throws IOException if none of the directories are specified in the
-   * configuration.
+   * configuration, or the storage type of a directory is changed.
    */
   @VisibleForTesting
   ChangedVolumes parseChangedVolumes(String newVolumes) throws IOException {
@@ -635,6 +644,12 @@ public class DataNode extends ReconfigurableBase
 
     if (locations.isEmpty()) {
       throw new IOException("No directory is specified.");
+    }
+
+    // Use the existing StorageLocation to detect storage type changes.
+    Map<String, StorageLocation> existingLocations = new HashMap<>();
+    for (StorageLocation loc : getStorageLocations(this.conf)) {
+      existingLocations.put(loc.getFile().getCanonicalPath(), loc);
     }
 
     ChangedVolumes results = new ChangedVolumes();
@@ -650,6 +665,12 @@ public class DataNode extends ReconfigurableBase
         if (location.getFile().getCanonicalPath().equals(
             dir.getRoot().getCanonicalPath())) {
           sl.remove();
+          StorageLocation old = existingLocations.get(
+              location.getFile().getCanonicalPath());
+          if (old != null &&
+              old.getStorageType() != location.getStorageType()) {
+            throw new IOException("Changing storage type is not allowed.");
+          }
           results.unchangedLocations.add(location);
           found = true;
           break;
@@ -1021,7 +1042,33 @@ public class DataNode extends ReconfigurableBase
       directoryScanner.shutdown();
     }
   }
-  
+
+  /**
+   * Initilizes {@link DiskBalancer}.
+   * @param  data - FSDataSet
+   * @param conf - Config
+   */
+  private void initDiskBalancer(FsDatasetSpi data,
+                                             Configuration conf) {
+    if (this.diskBalancer != null) {
+      return;
+    }
+
+    DiskBalancer.BlockMover mover = new DiskBalancer.DiskBalancerMover(data,
+        conf);
+    this.diskBalancer = new DiskBalancer(getDatanodeUuid(), conf, mover);
+  }
+
+  /**
+   * Shutdown disk balancer.
+   */
+  private  void shutdownDiskBalancer() {
+    if (this.diskBalancer != null) {
+      this.diskBalancer.shutdown();
+      this.diskBalancer = null;
+    }
+  }
+
   private void initDataXceiver(Configuration conf) throws IOException {
     // find free port or use privileged port provided
     TcpPeerServer tcpPeerServer;
@@ -1134,8 +1181,25 @@ public class DataNode extends ReconfigurableBase
    * Report a bad block which is hosted on the local DN.
    */
   public void reportBadBlocks(ExtendedBlock block) throws IOException{
-    BPOfferService bpos = getBPOSForBlock(block);
     FsVolumeSpi volume = getFSDataset().getVolume(block);
+    if (volume == null) {
+      LOG.warn("Cannot find FsVolumeSpi to report bad block: " + block);
+      return;
+    }
+    reportBadBlocks(block, volume);
+  }
+
+  /**
+   * Report a bad block which is hosted on the local DN.
+   *
+   * @param block the bad block which is hosted on the local DN
+   * @param volume the volume that block is stored in and the volume
+   *        must not be null
+   * @throws IOException
+   */
+  public void reportBadBlocks(ExtendedBlock block, FsVolumeSpi volume)
+      throws IOException {
+    BPOfferService bpos = getBPOSForBlock(block);
     bpos.reportBadBlocks(
         block, volume.getStorageID(), volume.getStorageType());
   }
@@ -1529,6 +1593,7 @@ public class DataNode extends ReconfigurableBase
     data.addBlockPool(nsInfo.getBlockPoolID(), conf);
     blockScanner.enableBlockPoolId(bpos.getBlockPoolId());
     initDirectoryScanner(conf);
+    initDiskBalancer(data, conf);
   }
 
   List<BPOfferService> getAllBpOs() {
@@ -1645,8 +1710,7 @@ public class DataNode extends ReconfigurableBase
    * Creates either NIO or regular depending on socketWriteTimeout.
    */
   public Socket newSocket() throws IOException {
-    return (dnConf.socketWriteTimeout > 0) ? 
-           SocketChannel.open().socket() : new Socket();                                   
+    return socketFactory.createSocket();
   }
 
   /**
@@ -1866,6 +1930,7 @@ public class DataNode extends ReconfigurableBase
 
     // Terminate directory scanner and block scanner
     shutdownPeriodicScanners();
+    shutdownDiskBalancer();
 
     // Stop the web server
     if (httpServer != null) {
@@ -1928,7 +1993,10 @@ public class DataNode extends ReconfigurableBase
       } catch (InterruptedException ie) {
       }
     }
-   
+    if (metrics != null) {
+      metrics.setDataNodeActiveXceiversCount(0);
+    }
+
    // IPC server needs to be shutdown late in the process, otherwise
    // shutdown command response won't get sent.
    if (ipcServer != null) {
@@ -2062,6 +2130,10 @@ public class DataNode extends ReconfigurableBase
   private void reportBadBlock(final BPOfferService bpos,
       final ExtendedBlock block, final String msg) {
     FsVolumeSpi volume = getFSDataset().getVolume(block);
+    if (volume == null) {
+      LOG.warn("Cannot find FsVolumeSpi to report bad block: " + block);
+      return;
+    }
     bpos.reportBadBlocks(
         block, volume.getStorageID(), volume.getStorageType());
     LOG.warn(msg);
@@ -2292,6 +2364,7 @@ public class DataNode extends ReconfigurableBase
         }
         sock = newSocket();
         NetUtils.connect(sock, curTarget, dnConf.socketTimeout);
+        sock.setTcpNoDelay(dnConf.getDataTransferServerTcpNoDelay());
         sock.setSoTimeout(targets.length * dnConf.socketTimeout);
 
         //
@@ -2866,6 +2939,13 @@ public class DataNode extends ReconfigurableBase
   }
 
   @Override // DataNodeMXBean
+  public String getDataPort(){
+    InetSocketAddress dataAddr = NetUtils.createSocketAddr(
+        this.getConf().get(DFS_DATANODE_ADDRESS_KEY));
+    return Integer.toString(dataAddr.getPort());
+  }
+
+  @Override // DataNodeMXBean
   public String getHttpPort(){
     return this.getConf().get("dfs.datanode.info.port");
   }
@@ -2909,6 +2989,25 @@ public class DataNode extends ReconfigurableBase
   }
 
   /**
+   * Returned information is a JSON representation of an array,
+   * each element of the array is a map contains the information
+   * about a block pool service actor.
+   */
+  @Override // DataNodeMXBean
+  public String getBPServiceActorInfo() {
+    final ArrayList<Map<String, String>> infoArray =
+        new ArrayList<Map<String, String>>();
+    for (BPOfferService bpos : blockPoolManager.getAllNamenodeThreads()) {
+      if (bpos != null) {
+        for (BPServiceActor actor : bpos.getBPServiceActors()) {
+          infoArray.add(actor.getActorInfoMap());
+        }
+      }
+    }
+    return JSON.toString(infoArray);
+  }
+
+  /**
    * Returned information is a JSON representation of a map with 
    * volume name as the key and value is a map of volume attribute 
    * keys to its values
@@ -2922,6 +3021,16 @@ public class DataNode extends ReconfigurableBase
   @Override // DataNodeMXBean
   public synchronized String getClusterId() {
     return clusterId;
+  }
+
+  @Override // DataNodeMXBean
+  public String getDiskBalancerStatus() {
+    try {
+      return this.diskBalancer.queryWorkStatus().toJsonString();
+    } catch (IOException ex) {
+      LOG.debug("Reading diskbalancer Status failed. ex:{}", ex);
+      return "";
+    }
   }
   
   public void refreshNamenodes(Configuration conf) throws IOException {
@@ -3282,5 +3391,69 @@ public class DataNode extends ReconfigurableBase
 
   public Tracer getTracer() {
     return tracer;
+  }
+
+  /**
+   * Allows submission of a disk balancer Job.
+   * @param planID  - Hash value of the plan.
+   * @param planVersion - Plan version, reserved for future use. We have only
+   *                    version 1 now.
+   * @param plan - Actual plan
+   * @throws IOException
+   */
+  @Override
+  public void submitDiskBalancerPlan(String planID,
+      long planVersion, String plan, boolean skipDateCheck) throws IOException {
+
+    checkSuperuserPrivilege();
+    // TODO : Support force option
+    this.diskBalancer.submitPlan(planID, planVersion, plan, skipDateCheck);
+  }
+
+  /**
+   * Cancels a running plan.
+   * @param planID - Hash string that identifies a plan
+   */
+  @Override
+  public void cancelDiskBalancePlan(String planID) throws
+      IOException {
+    checkSuperuserPrivilege();
+    this.diskBalancer.cancelPlan(planID);
+  }
+
+  /**
+   * Returns the status of current or last executed work plan.
+   * @return DiskBalancerWorkStatus.
+   * @throws IOException
+   */
+  @Override
+  public DiskBalancerWorkStatus queryDiskBalancerPlan() throws IOException {
+    checkSuperuserPrivilege();
+    return this.diskBalancer.queryWorkStatus();
+  }
+
+  /**
+   * Gets a runtime configuration value from  diskbalancer instance. For
+   * example : DiskBalancer bandwidth.
+   *
+   * @param key - String that represents the run time key value.
+   * @return value of the key as a string.
+   * @throws IOException - Throws if there is no such key
+   */
+  @Override
+  public String getDiskBalancerSetting(String key) throws IOException {
+    checkSuperuserPrivilege();
+    Preconditions.checkNotNull(key);
+    switch (key) {
+    case DiskBalancerConstants.DISKBALANCER_VOLUME_NAME:
+      return this.diskBalancer.getVolumeNames();
+    case DiskBalancerConstants.DISKBALANCER_BANDWIDTH :
+      return Long.toString(this.diskBalancer.getBandwidth());
+    default:
+      LOG.error("Disk Balancer - Unknown key in get balancer setting. Key: " +
+          key);
+      throw new DiskBalancerException("Unknown key",
+          DiskBalancerException.Result.UNKNOWN_KEY);
+    }
   }
 }

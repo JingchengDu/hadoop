@@ -37,7 +37,7 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
 import javax.ws.rs.core.UriInfo;
-
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -53,14 +53,13 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.AppInfo;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.AppsInfo;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.ContainerInfo;
+import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.ContainerLogsInfo;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.ContainersInfo;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.NodeInfo;
-import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.webapp.BadRequestException;
 import org.apache.hadoop.yarn.webapp.NotFoundException;
 import org.apache.hadoop.yarn.webapp.WebApp;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
-
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
@@ -182,7 +181,7 @@ public class NMWebServices {
     ContainerId containerId = null;
     init();
     try {
-      containerId = ConverterUtils.toContainerId(id);
+      containerId = ContainerId.fromString(id);
     } catch (Exception e) {
       throw new BadRequestException("invalid container id, " + id);
     }
@@ -195,7 +194,69 @@ public class NMWebServices {
         .toString(), webapp.name(), hsr.getRemoteUser());
 
   }
-  
+
+  /**
+   * Returns log file's name as well as current file size for a container.
+   *
+   * @param hsr
+   *    HttpServletRequest
+   * @param containerIdStr
+   *    The container ID
+   * @return
+   *    The log file's name and current file size
+   */
+  @GET
+  @Path("/containers/{containerid}/logs")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public ContainerLogsInfo getContainerLogsInfo(@javax.ws.rs.core.Context
+      HttpServletRequest hsr,
+      @PathParam("containerid") String containerIdStr) {
+    ContainerId containerId = null;
+    init();
+    try {
+      containerId = ContainerId.fromString(containerIdStr);
+    } catch (Exception e) {
+      throw new BadRequestException("invalid container id, " + containerIdStr);
+    }
+    try {
+      return new ContainerLogsInfo(this.nmContext, containerId,
+          hsr.getRemoteUser());
+    } catch (YarnException ex) {
+      throw new WebApplicationException(ex);
+    }
+  }
+
+  /**
+   * Returns the contents of a container's log file in plain text.
+   *
+   * Only works for containers that are still in the NodeManager's memory, so
+   * logs are no longer available after the corresponding application is no
+   * longer running.
+   *
+   * @param containerIdStr
+   *    The container ID
+   * @param filename
+   *    The name of the log file
+   * @param format
+   *    The content type
+   * @param size
+   *    the size of the log file
+   * @return
+   *    The contents of the container's log file
+   */
+  @GET
+  @Path("/containers/{containerid}/logs/{filename}")
+  @Produces({ MediaType.TEXT_PLAIN })
+  @Public
+  @Unstable
+  public Response getContainerLogFile(
+      @PathParam("containerid") String containerIdStr,
+      @PathParam("filename") String filename,
+      @QueryParam("format") String format,
+      @QueryParam("size") String size) {
+    return getLogs(containerIdStr, filename, format, size);
+  }
+
   /**
    * Returns the contents of a container's log file in plain text. 
    *
@@ -207,6 +268,10 @@ public class NMWebServices {
    *    The container ID
    * @param filename
    *    The name of the log file
+   * @param format
+   *    The content type
+   * @param size
+   *    the size of the log file
    * @return
    *    The contents of the container's log file
    */
@@ -217,10 +282,11 @@ public class NMWebServices {
   @Unstable
   public Response getLogs(@PathParam("containerid") String containerIdStr,
       @PathParam("filename") String filename,
-      @QueryParam("download") String download) {
+      @QueryParam("format") String format,
+      @QueryParam("size") String size) {
     ContainerId containerId;
     try {
-      containerId = ConverterUtils.toContainerId(containerIdStr);
+      containerId = ContainerId.fromString(containerIdStr);
     } catch (IllegalArgumentException ex) {
       return Response.status(Status.BAD_REQUEST).build();
     }
@@ -234,38 +300,84 @@ public class NMWebServices {
     } catch (YarnException ex) {
       return Response.serverError().entity(ex.getMessage()).build();
     }
-    boolean downloadFile = parseBooleanParam(download);
+    final long bytes = parseLongParam(size);
+    String contentType = WebAppUtils.getDefaultLogContentType();
+    if (format != null && !format.isEmpty()) {
+      contentType = WebAppUtils.getSupportedLogContentType(format);
+      if (contentType == null) {
+        String errorMessage = "The valid values for the parameter : format "
+            + "are " + WebAppUtils.listSupportedLogContentType();
+        return Response.status(Status.BAD_REQUEST).entity(errorMessage)
+            .build();
+      }
+    }
+
     try {
       final FileInputStream fis = ContainerLogsUtils.openLogFileForRead(
           containerIdStr, logFile, nmContext);
-      
+      final long fileLength = logFile.length();
+
       StreamingOutput stream = new StreamingOutput() {
         @Override
         public void write(OutputStream os) throws IOException,
             WebApplicationException {
-          int bufferSize = 65536;
-          byte[] buf = new byte[bufferSize];
-          int len;
-          while ((len = fis.read(buf, 0, bufferSize)) > 0) {
-            os.write(buf, 0, len);
+          try {
+            int bufferSize = 65536;
+            byte[] buf = new byte[bufferSize];
+            long toSkip = 0;
+            long totalBytesToRead = fileLength;
+            long skipAfterRead = 0;
+            if (bytes < 0) {
+              long absBytes = Math.abs(bytes);
+              if (absBytes < fileLength) {
+                toSkip = fileLength - absBytes;
+                totalBytesToRead = absBytes;
+              }
+              org.apache.hadoop.io.IOUtils.skipFully(fis, toSkip);
+            } else {
+              if (bytes < fileLength) {
+                totalBytesToRead = bytes;
+                skipAfterRead = fileLength - bytes;
+              }
+            }
+
+            long curRead = 0;
+            long pendingRead = totalBytesToRead - curRead;
+            int toRead = pendingRead > buf.length ? buf.length
+                : (int) pendingRead;
+            int len = fis.read(buf, 0, toRead);
+            while (len != -1 && curRead < totalBytesToRead) {
+              os.write(buf, 0, len);
+              curRead += len;
+
+              pendingRead = totalBytesToRead - curRead;
+              toRead = pendingRead > buf.length ? buf.length
+                  : (int) pendingRead;
+              len = fis.read(buf, 0, toRead);
+            }
+            org.apache.hadoop.io.IOUtils.skipFully(fis, skipAfterRead);
+            os.flush();
+          } finally {
+            IOUtils.closeQuietly(fis);
           }
-          os.flush();
         }
       };
       ResponseBuilder resp = Response.ok(stream);
-      if (downloadFile) {
-        resp.header("Content-Type", "application/octet-stream");
-      }
+      resp.header("Content-Type", contentType);
+      // Sending the X-Content-Type-Options response header with the value
+      // nosniff will prevent Internet Explorer from MIME-sniffing a response
+      // away from the declared content-type.
+      resp.header("X-Content-Type-Options", "nosniff");
       return resp.build();
     } catch (IOException ex) {
       return Response.serverError().entity(ex.getMessage()).build();
     }
   }
 
-  private boolean parseBooleanParam(String param) {
-    if (param != null) {
-      return ("true").equalsIgnoreCase(param);
+  private long parseLongParam(String bytes) {
+    if (bytes == null || bytes.isEmpty()) {
+      return Long.MAX_VALUE;
     }
-    return false;
+    return Long.parseLong(bytes);
   }
 }

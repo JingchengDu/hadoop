@@ -18,8 +18,9 @@
 
 package org.apache.hadoop.yarn.logaggregation;
 
-import java.util.List;
+import java.util.Set;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ContainerState;
 
 public class ContainerLogsRequest {
   private ApplicationId appId;
@@ -29,7 +30,9 @@ public class ContainerLogsRequest {
   private String appOwner;
   private boolean appFinished;
   private String outputLocalDir;
-  private List<String> logTypes;
+  private Set<String> logTypes;
+  private long bytes;
+  private ContainerState containerState;
 
   public ContainerLogsRequest() {}
 
@@ -42,12 +45,14 @@ public class ContainerLogsRequest {
     this.setContainerId(request.getContainerId());
     this.setOutputLocalDir(request.getOutputLocalDir());
     this.setLogTypes(request.getLogTypes());
+    this.setBytes(request.getBytes());
+    this.setContainerState(request.getContainerState());
   }
 
   public ContainerLogsRequest(ApplicationId applicationId,
       boolean isAppFinished, String owner,
       String address, String httpAddress, String container, String localDir,
-      List<String> logs) {
+      Set<String> logs, long bytes, ContainerState containerState) {
     this.setAppId(applicationId);
     this.setAppFinished(isAppFinished);
     this.setAppOwner(owner);
@@ -56,6 +61,8 @@ public class ContainerLogsRequest {
     this.setContainerId(container);
     this.setOutputLocalDir(localDir);
     this.setLogTypes(logs);
+    this.setBytes(bytes);
+    this.setContainerState(containerState);
   }
 
   public ApplicationId getAppId() {
@@ -114,11 +121,27 @@ public class ContainerLogsRequest {
     this.outputLocalDir = outputLocalDir;
   }
 
-  public List<String> getLogTypes() {
+  public Set<String> getLogTypes() {
     return logTypes;
   }
 
-  public void setLogTypes(List<String> logTypes) {
+  public void setLogTypes(Set<String> logTypes) {
     this.logTypes = logTypes;
+  }
+
+  public long getBytes() {
+    return bytes;
+  }
+
+  public void setBytes(long bytes) {
+    this.bytes = bytes;
+  }
+
+  public ContainerState getContainerState() {
+    return containerState;
+  }
+
+  public void setContainerState(ContainerState containerState) {
+    this.containerState = containerState;
   }
 }

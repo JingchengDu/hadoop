@@ -18,7 +18,6 @@
 package org.apache.hadoop.crypto.key.kms;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.Charsets;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.key.KeyProvider;
@@ -38,8 +37,12 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.hadoop.security.authentication.client.ConnectionConfigurator;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
+import org.apache.hadoop.security.token.TokenRenewer;
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier;
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL;
 import org.apache.hadoop.util.HttpExceptionUtils;
+import org.apache.hadoop.util.KMSUtil;
 import org.apache.http.client.utils.URIBuilder;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
@@ -61,6 +64,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
@@ -94,7 +98,8 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
 
   private static final String ANONYMOUS_REQUESTS_DISALLOWED = "Anonymous requests are disallowed";
 
-  public static final String TOKEN_KIND = "kms-dt";
+  public static final String TOKEN_KIND_STR = "kms-dt";
+  public static final Text TOKEN_KIND = new Text(TOKEN_KIND_STR);
 
   public static final String SCHEME_NAME = "kms";
 
@@ -143,6 +148,54 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
       List<EncryptedKeyVersion> ekvs =
           parseJSONEncKeyVersion(keyName, response);
       keyQueue.addAll(ekvs);
+    }
+  }
+
+  /**
+   * The KMS implementation of {@link TokenRenewer}.
+   */
+  public static class KMSTokenRenewer extends TokenRenewer {
+    private static final Logger LOG =
+        LoggerFactory.getLogger(KMSTokenRenewer.class);
+
+    @Override
+    public boolean handleKind(Text kind) {
+      return kind.equals(TOKEN_KIND);
+    }
+
+    @Override
+    public boolean isManaged(Token<?> token) throws IOException {
+      return true;
+    }
+
+    @Override
+    public long renew(Token<?> token, Configuration conf) throws IOException {
+      LOG.debug("Renewing delegation token {}", token);
+      KeyProvider keyProvider = KMSUtil.createKeyProvider(conf,
+          KeyProviderFactory.KEY_PROVIDER_PATH);
+      if (!(keyProvider instanceof
+          KeyProviderDelegationTokenExtension.DelegationTokenExtension)) {
+        LOG.warn("keyProvider {} cannot renew dt.", keyProvider == null ?
+            "null" : keyProvider.getClass());
+        return 0;
+      }
+      return ((KeyProviderDelegationTokenExtension.DelegationTokenExtension)
+          keyProvider).renewDelegationToken(token);
+    }
+
+    @Override
+    public void cancel(Token<?> token, Configuration conf) throws IOException {
+      LOG.debug("Canceling delegation token {}", token);
+      KeyProvider keyProvider = KMSUtil.createKeyProvider(conf,
+          KeyProviderFactory.KEY_PROVIDER_PATH);
+      if (!(keyProvider instanceof
+          KeyProviderDelegationTokenExtension.DelegationTokenExtension)) {
+        LOG.warn("keyProvider {} cannot cancel dt.", keyProvider == null ?
+            "null" : keyProvider.getClass());
+        return;
+      }
+      ((KeyProviderDelegationTokenExtension.DelegationTokenExtension)
+          keyProvider).cancelDelegationToken(token);
     }
   }
 
@@ -218,7 +271,7 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
   }
 
   private static void writeJson(Map map, OutputStream os) throws IOException {
-    Writer writer = new OutputStreamWriter(os, Charsets.UTF_8);
+    Writer writer = new OutputStreamWriter(os, StandardCharsets.UTF_8);
     ObjectMapper jsonMapper = new ObjectMapper();
     jsonMapper.writerWithDefaultPrettyPrinter().writeValue(writer, map);
   }
@@ -484,10 +537,12 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
           UserGroupInformation.AuthenticationMethod.PROXY)
                               ? currentUgi.getShortUserName() : null;
 
-      // check and renew TGT to handle potential expiration
-      actualUgi.checkTGTAndReloginFromKeytab();
-      // creating the HTTP connection using the current UGI at constructor time
-      conn = actualUgi.doAs(new PrivilegedExceptionAction<HttpURLConnection>() {
+      // If current UGI contains kms-dt && is not proxy, doAs it to use its dt.
+      // Otherwise, create the HTTP connection using the UGI at constructor time
+      UserGroupInformation ugiToUse =
+          (currentUgiContainsKmsDt() && doAsUser == null) ?
+              currentUgi : actualUgi;
+      conn = ugiToUse.doAs(new PrivilegedExceptionAction<HttpURLConnection>() {
         @Override
         public HttpURLConnection run() throws Exception {
           DelegationTokenAuthenticatedURL authUrl =
@@ -854,6 +909,100 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
   }
 
   @Override
+  public long renewDelegationToken(final Token<?> dToken) throws IOException {
+    try {
+      final String doAsUser = getDoAsUser();
+      final DelegationTokenAuthenticatedURL.Token token =
+          generateDelegationToken(dToken);
+      final URL url = createURL(null, null, null, null);
+      LOG.debug("Renewing delegation token {} with url:{}, as:{}",
+          token, url, doAsUser);
+      final DelegationTokenAuthenticatedURL authUrl =
+          new DelegationTokenAuthenticatedURL(configurator);
+      return actualUgi.doAs(
+          new PrivilegedExceptionAction<Long>() {
+            @Override
+            public Long run() throws Exception {
+              return authUrl.renewDelegationToken(url, token, doAsUser);
+            }
+          }
+      );
+    } catch (Exception ex) {
+      if (ex instanceof IOException) {
+        throw (IOException) ex;
+      } else {
+        throw new IOException(ex);
+      }
+    }
+  }
+
+  @Override
+  public Void cancelDelegationToken(final Token<?> dToken) throws IOException {
+    try {
+      final String doAsUser = getDoAsUser();
+      final DelegationTokenAuthenticatedURL.Token token =
+          generateDelegationToken(dToken);
+      return actualUgi.doAs(
+          new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+              final URL url = createURL(null, null, null, null);
+              LOG.debug("Cancelling delegation token {} with url:{}, as:{}",
+                  dToken, url, doAsUser);
+              final DelegationTokenAuthenticatedURL authUrl =
+                  new DelegationTokenAuthenticatedURL(configurator);
+              authUrl.cancelDelegationToken(url, token, doAsUser);
+              return null;
+            }
+          }
+      );
+    } catch (Exception ex) {
+      if (ex instanceof IOException) {
+        throw (IOException) ex;
+      } else {
+        throw new IOException(ex);
+      }
+    }
+  }
+
+  /**
+   * Get the doAs user name.
+   *
+   * 'actualUGI' is the UGI of the user creating the client
+   * It is possible that the creator of the KMSClientProvier
+   * calls this method on behalf of a proxyUser (the doAsUser).
+   * In which case this call has to be made as the proxy user.
+   *
+   * @return the doAs user name.
+   * @throws IOException
+   */
+  private String getDoAsUser() throws IOException {
+    UserGroupInformation currentUgi = UserGroupInformation.getCurrentUser();
+    return (currentUgi.getAuthenticationMethod() ==
+        UserGroupInformation.AuthenticationMethod.PROXY)
+        ? currentUgi.getShortUserName() : null;
+  }
+
+  /**
+   * Generate a DelegationTokenAuthenticatedURL.Token from the given generic
+   * typed delegation token.
+   *
+   * @param dToken The delegation token.
+   * @return The DelegationTokenAuthenticatedURL.Token, with its delegation
+   *         token set to the delegation token passed in.
+   */
+  private DelegationTokenAuthenticatedURL.Token generateDelegationToken(
+      final Token<?> dToken) {
+    DelegationTokenAuthenticatedURL.Token token =
+        new DelegationTokenAuthenticatedURL.Token();
+    Token<AbstractDelegationTokenIdentifier> dt =
+        new Token<>(dToken.getIdentifier(), dToken.getPassword(),
+            dToken.getKind(), dToken.getService());
+    token.setDelegationToken(dt);
+    return token;
+  }
+
+  @Override
   public Token<?>[] addDelegationTokens(final String renewer,
       Credentials credentials) throws IOException {
     Token<?>[] tokens = null;
@@ -864,15 +1013,7 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
       final DelegationTokenAuthenticatedURL authUrl =
           new DelegationTokenAuthenticatedURL(configurator);
       try {
-        // 'actualUGI' is the UGI of the user creating the client 
-        // It is possible that the creator of the KMSClientProvier
-        // calls this method on behalf of a proxyUser (the doAsUser).
-        // In which case this call has to be made as the proxy user.
-        UserGroupInformation currentUgi = UserGroupInformation.getCurrentUser();
-        final String doAsUser = (currentUgi.getAuthenticationMethod() ==
-            UserGroupInformation.AuthenticationMethod.PROXY)
-                                ? currentUgi.getShortUserName() : null;
-
+        final String doAsUser = getDoAsUser();
         token = actualUgi.doAs(new PrivilegedExceptionAction<Token<?>>() {
           @Override
           public Token<?> run() throws Exception {
@@ -903,6 +1044,20 @@ public class KMSClientProvider extends KeyProvider implements CryptoExtension,
         url.getPort());
     Text dtService = SecurityUtil.buildTokenService(addr);
     return dtService;
+  }
+
+  private boolean currentUgiContainsKmsDt() throws IOException {
+    // Add existing credentials from current UGI, since provider is cached.
+    Credentials creds = UserGroupInformation.getCurrentUser().
+        getCredentials();
+    if (!creds.getAllTokens().isEmpty()) {
+      org.apache.hadoop.security.token.Token<? extends TokenIdentifier>
+          dToken = creds.getToken(getDelegationTokenService());
+      if (dToken != null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

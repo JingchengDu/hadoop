@@ -31,6 +31,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.security.token.DtFetcher;
 
 import static org.junit.Assert.assertEquals;
@@ -71,7 +72,7 @@ public class TestDtUtilShell {
 
   private final ByteArrayOutputStream outContent = new ByteArrayOutputStream();
   private final Path workDir = new Path(
-             System.getProperty("test.build.data", "/tmp"), "TestDtUtilShell");
+      GenericTestUtils.getTestDir("TestDtUtilShell").getAbsolutePath());
   private final Path tokenFile = new Path(workDir, "testPrintTokenFile");
   private final Path tokenFile2 = new Path(workDir, "testPrintTokenFile2");
   private final Path tokenLegacyFile = new Path(workDir, "testPrintTokenFile3");
@@ -155,6 +156,30 @@ public class TestDtUtilShell {
                 outContent.toString().contains(KIND.toString()));
     assertFalse("test no alias print output service:\n" + outContent.toString(),
                 outContent.toString().contains(SERVICE.toString()));
+  }
+
+  @Test
+  public void testEdit() throws Exception {
+    String oldService = SERVICE2.toString();
+    String newAlias = "newName:12345";
+    args = new String[] {"edit",
+        "-service", oldService, "-alias", newAlias, tokenFilename2};
+    rc = dt.run(args);
+    assertEquals("test simple edit exit code", 0, rc);
+    args = new String[] {"print", "-alias", oldService, tokenFilename2};
+    rc = dt.run(args);
+    assertEquals("test simple edit print old exit code", 0, rc);
+    assertTrue("test simple edit output kind old:\n" + outContent.toString(),
+               outContent.toString().contains(KIND.toString()));
+    assertTrue("test simple edit output service old:\n" + outContent.toString(),
+               outContent.toString().contains(oldService));
+    args = new String[] {"print", "-alias", newAlias, tokenFilename2};
+    rc = dt.run(args);
+    assertEquals("test simple edit print new exit code", 0, rc);
+    assertTrue("test simple edit output kind new:\n" + outContent.toString(),
+               outContent.toString().contains(KIND.toString()));
+    assertTrue("test simple edit output service new:\n" + outContent.toString(),
+               outContent.toString().contains(newAlias));
   }
 
   @Test

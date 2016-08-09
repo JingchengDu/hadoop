@@ -18,11 +18,19 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.webapp;
 
+import static org.apache.hadoop.yarn.webapp.WebServicesTestUtils.assertResponseStatusCode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,16 +51,14 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import com.sun.jersey.api.client.config.DefaultClientConfig;
-
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
 import org.apache.hadoop.security.authentication.server.PseudoAuthenticationHandler;
-import org.apache.hadoop.yarn.api.records.AMBlackListingRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.LocalResource;
@@ -61,6 +67,7 @@ import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.ReservationId;
+import org.apache.hadoop.yarn.api.records.URL;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
@@ -72,9 +79,16 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.Capacity
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairSchedulerConfiguration;
-import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.*;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppPriority;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppQueue;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppState;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationSubmissionContextInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CredentialsInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.LocalResourceInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.LogAggregationContextInfo;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.webapp.GenericExceptionHandler;
+import org.apache.hadoop.yarn.webapp.GuiceServletConfig;
 import org.apache.hadoop.yarn.webapp.JerseyTestBase;
 import org.apache.hadoop.yarn.webapp.WebServicesTestUtils;
 import org.codehaus.jettison.json.JSONException;
@@ -95,12 +109,12 @@ import org.xml.sax.SAXException;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.google.inject.Singleton;
-import com.google.inject.servlet.GuiceServletContextListener;
 import com.google.inject.servlet.ServletModule;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.ClientResponse.Status;
 import com.sun.jersey.api.client.WebResource;
+import com.sun.jersey.api.client.config.DefaultClientConfig;
 import com.sun.jersey.api.client.filter.LoggingFilter;
 import com.sun.jersey.api.json.JSONJAXBContext;
 import com.sun.jersey.api.json.JSONMarshaller;
@@ -113,7 +127,6 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
 
   private static final int CONTAINER_MB = 1024;
 
-  private static Injector injector;
   private String webserviceUserName = "testuser";
 
   private boolean setAuthFilter = false;
@@ -122,14 +135,6 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
       "test.build.data", "/tmp")).getAbsolutePath();
   private static final String FS_ALLOC_FILE = new File(TEST_DIR,
       "test-fs-queues.xml").getAbsolutePath();
-
-  public static class GuiceServletConfig extends GuiceServletContextListener {
-
-    @Override
-    protected Injector getInjector() {
-      return injector;
-    }
-  }
 
   /*
    * Helper class to allow testing of RM web services which require
@@ -285,19 +290,19 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     case 0:
     default:
       // No Auth Capacity Scheduler
-      injector = getNoAuthInjectorCap();
+      GuiceServletConfig.setInjector(getNoAuthInjectorCap());
       break;
     case 1:
       // Simple Auth Capacity Scheduler
-      injector = getSimpleAuthInjectorCap();
+      GuiceServletConfig.setInjector(getSimpleAuthInjectorCap());
       break;
     case 2:
       // No Auth Fair Scheduler
-      injector = getNoAuthInjectorFair();
+      GuiceServletConfig.setInjector(getNoAuthInjectorFair());
       break;
     case 3:
       // Simple Auth Fair Scheduler
-      injector = getSimpleAuthInjectorFair();
+      GuiceServletConfig.setInjector(getSimpleAuthInjectorFair());
       break;
     }
   }
@@ -336,7 +341,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
           this
             .constructWebResource("apps", app.getApplicationId().toString(),
               "state").accept(mediaType).get(ClientResponse.class);
-      assertEquals(Status.OK, response.getClientResponseStatus());
+      assertResponseStatusCode(Status.OK, response.getStatusInfo());
       if (mediaType.equals(MediaType.APPLICATION_JSON)) {
         verifyAppStateJson(response, RMAppState.ACCEPTED);
       } else if (mediaType.equals(MediaType.APPLICATION_XML)) {
@@ -375,10 +380,11 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
               .put(ClientResponse.class);
 
         if (!isAuthenticationEnabled()) {
-          assertEquals(Status.UNAUTHORIZED, response.getClientResponseStatus());
+          assertResponseStatusCode(Status.UNAUTHORIZED,
+              response.getStatusInfo());
           continue;
         }
-        assertEquals(Status.ACCEPTED, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.ACCEPTED, response.getStatusInfo());
         if (mediaType.equals(MediaType.APPLICATION_JSON)) {
           verifyAppStateJson(response, RMAppState.FINAL_SAVING,
             RMAppState.KILLED, RMAppState.KILLING, RMAppState.ACCEPTED);
@@ -395,7 +401,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
           tmp = tmp.queryParam("user.name", webserviceUserName);
         }
         response = tmp.get(ClientResponse.class);
-        assertEquals(Status.OK, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.OK, response.getStatusInfo());
         assertTrue(locationHeaderValue.endsWith("/ws/v1/cluster/apps/"
             + app.getApplicationId().toString() + "/state"));
 
@@ -406,9 +412,13 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
                 .constructWebResource("apps",
                   app.getApplicationId().toString(), "state").accept(mediaType)
                 .entity(entity, contentType).put(ClientResponse.class);
-          assertTrue((response.getClientResponseStatus() == Status.ACCEPTED)
-              || (response.getClientResponseStatus() == Status.OK));
-          if (response.getClientResponseStatus() == Status.OK) {
+          assertTrue(
+              (response.getStatusInfo().getStatusCode()
+                  == Status.ACCEPTED.getStatusCode())
+              || (response.getStatusInfo().getStatusCode()
+                  == Status.OK.getStatusCode()));
+          if (response.getStatusInfo().getStatusCode()
+              == Status.OK.getStatusCode()) {
             assertEquals(RMAppState.KILLED, app.getState());
             if (mediaType.equals(MediaType.APPLICATION_JSON)) {
               verifyAppStateJson(response, RMAppState.KILLED);
@@ -457,11 +467,12 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
                 .put(ClientResponse.class);
 
           if (!isAuthenticationEnabled()) {
-            assertEquals(Status.UNAUTHORIZED,
-              response.getClientResponseStatus());
+            assertResponseStatusCode(Status.UNAUTHORIZED,
+                response.getStatusInfo());
             continue;
           }
-          assertEquals(Status.BAD_REQUEST, response.getClientResponseStatus());
+          assertResponseStatusCode(Status.BAD_REQUEST,
+              response.getStatusInfo());
         }
       }
     }
@@ -575,13 +586,16 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
             .accept(MediaType.APPLICATION_XML)
             .entity(info, MediaType.APPLICATION_XML).put(ClientResponse.class);
       if (!isAuthenticationEnabled()) {
-        assertEquals(Status.UNAUTHORIZED, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.UNAUTHORIZED,
+            response.getStatusInfo());
         continue;
       }
       if (i == 0) {
-        assertEquals(Status.NOT_FOUND, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.NOT_FOUND,
+            response.getStatusInfo());
       } else {
-        assertEquals(Status.BAD_REQUEST, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.BAD_REQUEST,
+            response.getStatusInfo());
       }
     }
     rm.stop();
@@ -628,9 +642,11 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
   public void validateResponseStatus(ClientResponse response,
       Status expectedUnauthorizedMode, Status expectedAuthorizedMode) {
     if (!isAuthenticationEnabled()) {
-      assertEquals(expectedUnauthorizedMode, response.getClientResponseStatus());
+      assertResponseStatusCode(expectedUnauthorizedMode,
+          response.getStatusInfo());
     } else {
-      assertEquals(expectedAuthorizedMode, response.getClientResponseStatus());
+      assertResponseStatusCode(expectedAuthorizedMode,
+          response.getStatusInfo());
     }
   }
 
@@ -827,26 +843,15 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
         System.currentTimeMillis(), 1).toString();
     appInfo.setReservationId(reservationId);
 
-    // Set AMBlackListingRequestInfo
-    boolean isAMBlackListingEnabled = true;
-    float disableFailureThreshold = 0.01f;
-    AMBlackListingRequestInfo amBlackListingRequestInfo
-        = new AMBlackListingRequestInfo();
-    amBlackListingRequestInfo.setAMBlackListingEnabled(
-        isAMBlackListingEnabled);
-    amBlackListingRequestInfo.setBlackListingDisableFailureThreshold(
-        disableFailureThreshold);
-    appInfo.setAMBlackListingRequestInfo(amBlackListingRequestInfo);
-
     ClientResponse response =
         this.constructWebResource(urlPath).accept(acceptMedia)
           .entity(appInfo, contentMedia).post(ClientResponse.class);
 
     if (!this.isAuthenticationEnabled()) {
-      assertEquals(Status.UNAUTHORIZED, response.getClientResponseStatus());
+      assertResponseStatusCode(Status.UNAUTHORIZED, response.getStatusInfo());
       return;
     }
-    assertEquals(Status.ACCEPTED, response.getClientResponseStatus());
+    assertResponseStatusCode(Status.ACCEPTED, response.getStatusInfo());
     assertTrue(!response.getHeaders().getFirst(HttpHeaders.LOCATION).isEmpty());
     String locURL = response.getHeaders().getFirst(HttpHeaders.LOCATION);
     assertTrue(locURL.contains("/apps/application"));
@@ -855,11 +860,11 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     WebResource res = resource().uri(new URI(locURL));
     res = res.queryParam("user.name", webserviceUserName);
     response = res.get(ClientResponse.class);
-    assertEquals(Status.OK, response.getClientResponseStatus());
+    assertResponseStatusCode(Status.OK, response.getStatusInfo());
 
     RMApp app =
         rm.getRMContext().getRMApps()
-          .get(ConverterUtils.toApplicationId(appId));
+          .get(ApplicationId.fromString(appId));
     assertEquals(appName, app.getName());
     assertEquals(webserviceUserName, app.getUser());
     assertEquals(2, app.getMaxAppAttempts());
@@ -877,8 +882,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     Map<String, LocalResource> appLRs = ctx.getLocalResources();
     assertTrue(appLRs.containsKey(lrKey));
     LocalResource exampleLR = appLRs.get(lrKey);
-    assertEquals(ConverterUtils.getYarnUrlFromURI(y.getUrl()),
-      exampleLR.getResource());
+    assertEquals(URL.fromURI(y.getUrl()), exampleLR.getResource());
     assertEquals(y.getSize(), exampleLR.getSize());
     assertEquals(y.getTimestamp(), exampleLR.getTimestamp());
     assertEquals(y.getType(), exampleLR.getType());
@@ -912,17 +916,10 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     // Check ReservationId
     assertEquals(reservationId, app.getReservationId().toString());
 
-    // Check AMBlackListingRequestInfo
-    AMBlackListingRequest amBlackListingRequest = asc.getAMBlackListRequest();
-    assertEquals(isAMBlackListingEnabled,
-        amBlackListingRequest.isAMBlackListingEnabled());
-    assertTrue(disableFailureThreshold == amBlackListingRequest
-        .getBlackListingDisableFailureThreshold());
-
     response =
         this.constructWebResource("apps", appId).accept(acceptMedia)
           .get(ClientResponse.class);
-    assertEquals(Status.OK, response.getClientResponseStatus());
+    assertResponseStatusCode(Status.OK, response.getStatusInfo());
   }
 
   public void testAppSubmitErrors(String acceptMedia, String contentMedia)
@@ -1010,7 +1007,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     ClientResponse response =
         this.constructWebResource(urlPath).accept(MediaType.APPLICATION_XML)
           .entity(body, MediaType.APPLICATION_XML).post(ClientResponse.class);
-    assertEquals(Status.BAD_REQUEST, response.getClientResponseStatus());
+    assertResponseStatusCode(Status.BAD_REQUEST, response.getStatusInfo());
     body = "{\"a\" : \"b\"}";
     response =
         this.constructWebResource(urlPath).accept(MediaType.APPLICATION_XML)
@@ -1035,7 +1032,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
           this
             .constructWebResource("apps", app.getApplicationId().toString(),
               "queue").accept(contentType).get(ClientResponse.class);
-      assertEquals(Status.OK, response.getClientResponseStatus());
+      assertResponseStatusCode(Status.OK, response.getStatusInfo());
       String expectedQueue = "default";
       if(!isCapacityScheduler) {
         expectedQueue = "root." + webserviceUserName;
@@ -1100,10 +1097,11 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
             .put(ClientResponse.class);
 
         if (!isAuthenticationEnabled()) {
-          assertEquals(Status.UNAUTHORIZED, response.getClientResponseStatus());
+          assertResponseStatusCode(Status.UNAUTHORIZED,
+              response.getStatusInfo());
           continue;
         }
-        assertEquals(Status.OK, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.OK, response.getStatusInfo());
         if (mediaType.equals(MediaType.APPLICATION_JSON)) {
           verifyAppPriorityJson(response, modifiedPriority);
         } else {
@@ -1114,7 +1112,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
             .constructWebResource("apps", app.getApplicationId().toString(),
                 "priority")
             .accept(mediaType).get(ClientResponse.class);
-        assertEquals(Status.OK, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.OK, response.getStatusInfo());
         if (mediaType.equals(MediaType.APPLICATION_JSON)) {
           verifyAppPriorityJson(response, modifiedPriority);
         } else {
@@ -1129,7 +1127,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
                 "priority")
             .entity(entity, contentType).accept(mediaType)
             .put(ClientResponse.class);
-        assertEquals(Status.FORBIDDEN, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.FORBIDDEN, response.getStatusInfo());
       }
     }
     rm.stop();
@@ -1179,10 +1177,11 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
               .put(ClientResponse.class);
 
         if (!isAuthenticationEnabled()) {
-          assertEquals(Status.UNAUTHORIZED, response.getClientResponseStatus());
+          assertResponseStatusCode(Status.UNAUTHORIZED,
+              response.getStatusInfo());
           continue;
         }
-        assertEquals(Status.OK, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.OK, response.getStatusInfo());
         String expectedQueue = "test";
         if(!isCapacityScheduler) {
           expectedQueue = "root.test";
@@ -1202,7 +1201,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
               .constructWebResource("apps", app.getApplicationId().toString(),
                 "queue").entity(entity, contentType).accept(mediaType)
               .put(ClientResponse.class);
-        assertEquals(Status.FORBIDDEN, response.getClientResponseStatus());
+        assertResponseStatusCode(Status.FORBIDDEN, response.getStatusInfo());
         if(isCapacityScheduler) {
           Assert.assertEquals("default", app.getQueue());
         }

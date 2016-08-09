@@ -108,10 +108,8 @@ public class TestAppLogAggregatorImpl {
     final ContainerId containerId = ContainerId.newContainerId(attemptId, 0);
 
     // create artificial log files
-    final File appLogDir = new File(LOCAL_LOG_DIR,
-        ConverterUtils.toString(applicationId));
-    final File containerLogDir = new File(appLogDir,
-        ConverterUtils.toString(containerId));
+    final File appLogDir = new File(LOCAL_LOG_DIR, applicationId.toString());
+    final File containerLogDir = new File(appLogDir, containerId.toString());
     containerLogDir.mkdirs();
     final Set<File> logFiles = createContainerLogFiles(containerLogDir, 3);
 
@@ -135,9 +133,9 @@ public class TestAppLogAggregatorImpl {
 
     // create artificial log files
     final File appLogDir = new File(LOCAL_LOG_DIR,
-        ConverterUtils.toString(applicationId));
+        applicationId.toString());
     final File containerLogDir = new File(appLogDir,
-        ConverterUtils.toString(containerId));
+        containerId.toString());
     containerLogDir.mkdirs();
     final Set<File> logFiles = createContainerLogFiles(containerLogDir, 3);
 
@@ -163,9 +161,9 @@ public class TestAppLogAggregatorImpl {
 
     // create artificial log files
     final File appLogDir = new File(LOCAL_LOG_DIR,
-        ConverterUtils.toString(applicationId));
+        applicationId.toString());
     final File containerLogDir = new File(appLogDir,
-        ConverterUtils.toString(containerId));
+        containerId.toString());
     containerLogDir.mkdirs();
     final Set<File> logFiles = createContainerLogFiles(containerLogDir, 3);
 
@@ -395,7 +393,7 @@ public class TestAppLogAggregatorImpl {
         new NMTokenSecretManagerInNM(),
         null,
         new ApplicationACLsManager(conf),
-        new NMNullStateStoreService(), false);
+        new NMNullStateStoreService(), false, conf);
   }
 
   private static final class AppLogAggregatorInTest extends

@@ -596,8 +596,8 @@ public class TestRMAppAttemptTransitions {
     } else {
       assertEquals(getProxyUrl(applicationAttempt),
           applicationAttempt.getTrackingUrl());
-      verifyAttemptFinalStateSaved();
     }
+    verifyAttemptFinalStateSaved();
     assertEquals(finishedContainerCount, applicationAttempt
         .getJustFinishedContainers().size());
     Assert.assertEquals(0, getFinishedContainersSentToAM(applicationAttempt)
@@ -735,6 +735,7 @@ public class TestRMAppAttemptTransitions {
     applicationAttempt.handle(new RMAppAttemptUnregistrationEvent(
         applicationAttempt.getAppAttemptId(), url, finalStatus,
         diagnostics));
+    sendAttemptUpdateSavedEvent(applicationAttempt);
     testAppAttemptFinishedState(null, finalStatus, url, diagnostics, 1,
         true);
     assertFalse(transferStateFromPreviousAttempt);
@@ -1443,6 +1444,13 @@ public class TestRMAppAttemptTransitions {
     Assert.assertTrue(applicationAttempt.getJustFinishedContainers().isEmpty());
     Assert.assertEquals(0, getFinishedContainersSentToAM(applicationAttempt)
         .size());
+
+    // verify if no containers to acknowledge to NM then event should not be
+    // triggered. Number of times event invoked is 1 i.e on second pull
+    containerStatuses = applicationAttempt.pullJustFinishedContainers();
+    Assert.assertEquals(0, containerStatuses.size());
+    Mockito.verify(rmnodeEventHandler, times(1))
+        .handle(Mockito.any(RMNodeEvent.class));
   }
 
   private static List<ContainerStatus> getFinishedContainersSentToAM(

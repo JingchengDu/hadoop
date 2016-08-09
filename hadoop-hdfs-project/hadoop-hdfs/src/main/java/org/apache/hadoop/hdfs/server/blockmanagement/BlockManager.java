@@ -22,6 +22,7 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -197,6 +198,10 @@ public class BlockManager implements BlockStatsMXBean {
   /** Used by metrics */
   public int getPendingDataNodeMessageCount() {
     return pendingDNMessages.count();
+  }
+  /** Used by metrics. */
+  public long getNumTimedOutPendingReconstructions() {
+    return pendingReconstruction.getNumTimedOuts();
   }
 
   /**replicationRecheckInterval is how often namenode checks for new replication work*/
@@ -1041,14 +1046,15 @@ public class BlockManager implements BlockStatsMXBean {
     final boolean isCorrupt = numCorruptReplicas != 0 &&
         numCorruptReplicas == numNodes;
     final int numMachines = isCorrupt ? numNodes: numNodes - numCorruptReplicas;
-    final DatanodeStorageInfo[] machines = new DatanodeStorageInfo[numMachines];
+    DatanodeStorageInfo[] machines = new DatanodeStorageInfo[numMachines];
     final byte[] blockIndices = blk.isStriped() ? new byte[numMachines] : null;
     int j = 0, i = 0;
     if (numMachines > 0) {
       for(DatanodeStorageInfo storage : blocksMap.getStorages(blk)) {
         final DatanodeDescriptor d = storage.getDatanodeDescriptor();
         final boolean replicaCorrupt = corruptReplicas.isReplicaCorrupt(blk, d);
-        if (isCorrupt || (!replicaCorrupt)) {
+        if ((isCorrupt || (!replicaCorrupt)) &&
+            storage.getState() != State.FAILED) {
           machines[j++] = storage;
           // TODO this can be more efficient
           if (blockIndices != null) {
@@ -1059,6 +1065,11 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
     }
+
+    if(j < machines.length) {
+      machines = Arrays.copyOf(machines, j);
+    }
+
     assert j == machines.length :
       "isCorrupt: " + isCorrupt + 
       " numMachines: " + numMachines +
@@ -1315,7 +1326,8 @@ public class BlockManager implements BlockStatsMXBean {
     if (!isPopulatingReplQueues()) {
       return;
     }
-    StringBuilder datanodes = new StringBuilder();
+    StringBuilder datanodes = blockLog.isDebugEnabled()
+        ? new StringBuilder() : null;
     for (DatanodeStorageInfo storage : blocksMap.getStorages(storedBlock)) {
       if (storage.getState() != State.NORMAL) {
         continue;
@@ -1324,10 +1336,12 @@ public class BlockManager implements BlockStatsMXBean {
       final Block b = getBlockOnStorage(storedBlock, storage);
       if (b != null) {
         invalidateBlocks.add(b, node, false);
-        datanodes.append(node).append(" ");
+        if (datanodes != null) {
+          datanodes.append(node).append(" ");
+        }
       }
     }
-    if (datanodes.length() != 0) {
+    if (datanodes != null && datanodes.length() != 0) {
       blockLog.debug("BLOCK* addToInvalidates: {} {}", storedBlock, datanodes);
     }
   }
@@ -2271,9 +2285,9 @@ public class BlockManager implements BlockStatsMXBean {
       return;
     }
     long startTimeRescanPostponedMisReplicatedBlocks = Time.monotonicNow();
+    namesystem.writeLock();
     long startPostponedMisReplicatedBlocksCount =
         getPostponedMisreplicatedBlocksCount();
-    namesystem.writeLock();
     try {
       // blocksPerRescan is the configured number of blocks per rescan.
       // Randomly select blocksPerRescan consecutive blocks from the HashSet
@@ -2326,9 +2340,9 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
     } finally {
-      namesystem.writeUnlock();
       long endPostponedMisReplicatedBlocksCount =
           getPostponedMisreplicatedBlocksCount();
+      namesystem.writeUnlock();
       LOG.info("Rescan of postponedMisreplicatedBlocks completed in " +
           (Time.monotonicNow() - startTimeRescanPostponedMisReplicatedBlocks) +
           " msecs. " + endPostponedMisReplicatedBlocksCount +

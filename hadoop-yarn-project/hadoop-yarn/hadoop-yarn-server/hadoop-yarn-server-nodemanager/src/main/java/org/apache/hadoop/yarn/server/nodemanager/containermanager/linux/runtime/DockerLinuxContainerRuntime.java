@@ -31,6 +31,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainerLaunch;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperation;
@@ -40,6 +41,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resource
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerClient;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerRunCommand;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerStopCommand;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerExecutionException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerRuntimeConstants;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerRuntimeContext;
@@ -318,6 +320,8 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
     @SuppressWarnings("unchecked")
     List<String> logDirs = ctx.getExecutionAttribute(LOG_DIRS);
     @SuppressWarnings("unchecked")
+    List<String> filecacheDirs = ctx.getExecutionAttribute(FILECACHE_DIRS);
+    @SuppressWarnings("unchecked")
     List<String> containerLocalDirs = ctx.getExecutionAttribute(
         CONTAINER_LOCAL_DIRS);
     @SuppressWarnings("unchecked")
@@ -326,6 +330,9 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
     @SuppressWarnings("unchecked")
     Map<Path, List<String>> localizedResources = ctx.getExecutionAttribute(
         LOCALIZED_RESOURCES);
+    @SuppressWarnings("unchecked")
+    List<String> userLocalDirs = ctx.getExecutionAttribute(USER_LOCAL_DIRS);
+
     Set<String> capabilities = new HashSet<>(Arrays.asList(conf.getStrings(
         YarnConfiguration.NM_DOCKER_CONTAINER_CAPABILITIES,
         YarnConfiguration.DEFAULT_NM_DOCKER_CONTAINER_CAPABILITIES)));
@@ -340,8 +347,10 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
         .addMountLocation("/etc/passwd", "/etc/password:ro");
     List<String> allDirs = new ArrayList<>(containerLocalDirs);
 
+    allDirs.addAll(filecacheDirs);
     allDirs.add(containerWorkDir.toString());
     allDirs.addAll(containerLogDirs);
+    allDirs.addAll(userLocalDirs);
     for (String dir: allDirs) {
       runCommand.addMountLocation(dir, dir);
     }
@@ -416,6 +425,10 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
     if (tcCommandFile != null) {
       launchOp.appendArgs(tcCommandFile);
     }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Launching container with cmd: " + runCommand
+          .getCommandWithArguments());
+    }
 
     try {
       privilegedOperationExecutor.executePrivilegedOperation(null,
@@ -423,6 +436,7 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
           false, false);
     } catch (PrivilegedOperationException e) {
       LOG.warn("Launch container failed. Exception: ", e);
+      LOG.info("Docker command used: " + runCommand.getCommandWithArguments());
 
       throw new ContainerExecutionException("Launch container failed", e
           .getExitCode(), e.getOutput(), e.getErrorOutput());
@@ -433,26 +447,39 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
   public void signalContainer(ContainerRuntimeContext ctx)
       throws ContainerExecutionException {
     Container container = ctx.getContainer();
-    PrivilegedOperation signalOp = new PrivilegedOperation(
-        PrivilegedOperation.OperationType.SIGNAL_CONTAINER);
+    ContainerExecutor.Signal signal = ctx.getExecutionAttribute(SIGNAL);
 
-    signalOp.appendArgs(ctx.getExecutionAttribute(RUN_AS_USER),
-        ctx.getExecutionAttribute(USER),
-        Integer.toString(PrivilegedOperation
-            .RunAsUserCommand.SIGNAL_CONTAINER.getValue()),
-        ctx.getExecutionAttribute(PID),
-        Integer.toString(ctx.getExecutionAttribute(SIGNAL).getValue()));
+    PrivilegedOperation privOp = null;
+    // Handle liveliness checks, send null signal to pid
+    if(ContainerExecutor.Signal.NULL.equals(signal)) {
+      privOp = new PrivilegedOperation(
+          PrivilegedOperation.OperationType.SIGNAL_CONTAINER);
+      privOp.appendArgs(ctx.getExecutionAttribute(RUN_AS_USER),
+          ctx.getExecutionAttribute(USER),
+          Integer.toString(PrivilegedOperation.RunAsUserCommand
+              .SIGNAL_CONTAINER.getValue()),
+          ctx.getExecutionAttribute(PID),
+          Integer.toString(ctx.getExecutionAttribute(SIGNAL).getValue()));
+
+    // All other signals handled as docker stop
+    } else {
+      String containerId = ctx.getContainer().getContainerId().toString();
+      DockerStopCommand stopCommand = new DockerStopCommand(containerId);
+      String commandFile = dockerClient.writeCommandToTempFile(stopCommand,
+          containerId);
+      privOp = new PrivilegedOperation(
+          PrivilegedOperation.OperationType.RUN_DOCKER_CMD);
+      privOp.appendArgs(commandFile);
+    }
+
+    //Some failures here are acceptable. Let the calling executor decide.
+    privOp.disableFailureLogging();
 
     try {
-      PrivilegedOperationExecutor executor = PrivilegedOperationExecutor
-          .getInstance(conf);
-
-      executor.executePrivilegedOperation(null,
-          signalOp, null, container.getLaunchContext().getEnvironment(),
-          false, true);
+      privilegedOperationExecutor.executePrivilegedOperation(null,
+          privOp, null, container.getLaunchContext().getEnvironment(),
+          false, false);
     } catch (PrivilegedOperationException e) {
-      LOG.warn("Signal container failed. Exception: ", e);
-
       throw new ContainerExecutionException("Signal container failed", e
           .getExitCode(), e.getOutput(), e.getErrorOutput());
     }

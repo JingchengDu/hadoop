@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -174,7 +175,7 @@ public class FSEditLog implements LogsPurgeable {
   
   // these are statistics counters.
   private long numTransactions;        // number of transactions
-  private long numTransactionsBatchedInSync;
+  private final AtomicLong numTransactionsBatchedInSync = new AtomicLong();
   private long totalTimeTransactions;  // total time for all transactions
   private NameNodeMetrics metrics;
 
@@ -316,7 +317,7 @@ public class FSEditLog implements LogsPurgeable {
     // Safety check: we should never start a segment if there are
     // newer txids readable.
     List<EditLogInputStream> streams = new ArrayList<EditLogInputStream>();
-    journalSet.selectInputStreams(streams, segmentTxId, true);
+    journalSet.selectInputStreams(streams, segmentTxId, true, false);
     if (!streams.isEmpty()) {
       String error = String.format("Cannot start writing at txid %s " +
         "when there is a stream available for read: %s",
@@ -672,7 +673,7 @@ public class FSEditLog implements LogsPurgeable {
       if (metrics != null) { // Metrics non-null only when used inside name node
         metrics.addSync(elapsed);
         metrics.incrTransactionsBatchedInSync(editsBatchedInSync);
-        numTransactionsBatchedInSync += editsBatchedInSync;
+        numTransactionsBatchedInSync.addAndGet(editsBatchedInSync);
       }
       
     } finally {
@@ -712,7 +713,7 @@ public class FSEditLog implements LogsPurgeable {
     buf.append(" Total time for transactions(ms): ");
     buf.append(totalTimeTransactions);
     buf.append(" Number of transactions batched in Syncs: ");
-    buf.append(numTransactionsBatchedInSync);
+    buf.append(numTransactionsBatchedInSync.get());
     buf.append(" Number of syncs: ");
     buf.append(editLogStream.getNumSync());
     buf.append(" SyncTimes(ms): ");
@@ -1281,7 +1282,9 @@ public class FSEditLog implements LogsPurgeable {
         "Cannot start log segment at txid %s when next expected " +
         "txid is %s", segmentTxId, txid + 1);
     
-    numTransactions = totalTimeTransactions = numTransactionsBatchedInSync = 0;
+    numTransactions = 0;
+    totalTimeTransactions = 0;
+    numTransactionsBatchedInSync.set(0L);
 
     // TODO no need to link this back to storage anymore!
     // See HDFS-2174.
@@ -1572,15 +1575,23 @@ public class FSEditLog implements LogsPurgeable {
 
   @Override
   public void selectInputStreams(Collection<EditLogInputStream> streams,
-      long fromTxId, boolean inProgressOk) throws IOException {
-    journalSet.selectInputStreams(streams, fromTxId, inProgressOk);
+      long fromTxId, boolean inProgressOk, boolean onlyDurableTxns)
+      throws IOException {
+    journalSet.selectInputStreams(streams, fromTxId,
+            inProgressOk, onlyDurableTxns);
   }
 
   public Collection<EditLogInputStream> selectInputStreams(
       long fromTxId, long toAtLeastTxId) throws IOException {
-    return selectInputStreams(fromTxId, toAtLeastTxId, null, true);
+    return selectInputStreams(fromTxId, toAtLeastTxId, null, true, false);
   }
-  
+
+  public Collection<EditLogInputStream> selectInputStreams(
+      long fromTxId, long toAtLeastTxId, MetaRecoveryContext recovery,
+      boolean inProgressOK) throws IOException {
+    return selectInputStreams(fromTxId, toAtLeastTxId,
+        recovery, inProgressOK, false);
+  }
   /**
    * Select a list of input streams.
    * 
@@ -1588,16 +1599,18 @@ public class FSEditLog implements LogsPurgeable {
    * @param toAtLeastTxId the selected streams must contain this transaction
    * @param recovery recovery context
    * @param inProgressOk set to true if in-progress streams are OK
+   * @param onlyDurableTxns set to true if streams are bounded
+   *                        by the durable TxId
    */
-  public Collection<EditLogInputStream> selectInputStreams(
-      long fromTxId, long toAtLeastTxId, MetaRecoveryContext recovery,
-      boolean inProgressOk) throws IOException {
+  public Collection<EditLogInputStream> selectInputStreams(long fromTxId,
+      long toAtLeastTxId, MetaRecoveryContext recovery, boolean inProgressOk,
+      boolean onlyDurableTxns) throws IOException {
 
     List<EditLogInputStream> streams = new ArrayList<EditLogInputStream>();
     synchronized(journalSetLock) {
       Preconditions.checkState(journalSet.isOpen(), "Cannot call " +
           "selectInputStreams() on closed FSEditLog");
-      selectInputStreams(streams, fromTxId, inProgressOk);
+      selectInputStreams(streams, fromTxId, inProgressOk, onlyDurableTxns);
     }
 
     try {

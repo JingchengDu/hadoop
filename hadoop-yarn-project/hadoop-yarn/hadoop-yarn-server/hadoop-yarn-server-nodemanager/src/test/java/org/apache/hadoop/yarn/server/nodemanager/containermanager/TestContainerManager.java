@@ -18,6 +18,11 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -38,10 +43,10 @@ import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.Shell;
-import org.apache.hadoop.yarn.api.protocolrecords.IncreaseContainersResourceRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.IncreaseContainersResourceResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.IncreaseContainersResourceRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.IncreaseContainersResourceResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
@@ -58,13 +63,9 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
-import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LocalResourceType;
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
-import org.apache.hadoop.yarn.api.records.LogAggregationContext;
-import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.SerializedException;
 import org.apache.hadoop.yarn.api.records.SignalContainerCommand;
@@ -75,7 +76,6 @@ import org.apache.hadoop.yarn.exceptions.InvalidContainerException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
 import org.apache.hadoop.yarn.security.NMTokenIdentifier;
-import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.api.ResourceManagerConstants;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrDecreaseContainersResourceEvent;
@@ -90,19 +90,12 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.Conta
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
 import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerSignalContext;
-import org.apache.hadoop.yarn.server.nodemanager.security.NMContainerTokenSecretManager;
-import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
 
 public class TestContainerManager extends BaseContainerManagerTest {
 
@@ -118,14 +111,6 @@ public class TestContainerManager extends BaseContainerManagerTest {
   @Before
   public void setup() throws IOException {
     super.setup();
-  }
-
-  public static ContainerId createContainerId(int id) {
-    ApplicationId appId = ApplicationId.newInstance(0, 0);
-    ApplicationAttemptId appAttemptId =
-        ApplicationAttemptId.newInstance(appId, 1);
-    ContainerId containerId = ContainerId.newContainerId(appAttemptId, id);
-    return containerId;
   }
   
   @Override
@@ -214,7 +199,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ContainerLaunchContext containerLaunchContext = 
         recordFactory.newRecordInstance(ContainerLaunchContext.class);
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(localFS
+        URL.fromPath(localFS
             .makeQualified(new Path(file.getAbsolutePath())));
     LocalResource rsrc_alpha = recordFactory.newRecordInstance(LocalResource.class);    
     rsrc_alpha.setResource(resource_alpha);
@@ -244,8 +229,8 @@ public class TestContainerManager extends BaseContainerManagerTest {
 
     // Now ascertain that the resources are localised correctly.
     ApplicationId appId = cId.getApplicationAttemptId().getApplicationId();
-    String appIDStr = ConverterUtils.toString(appId);
-    String containerIDStr = ConverterUtils.toString(cId);
+    String appIDStr = appId.toString();
+    String containerIDStr = cId.toString();
     File userCacheDir = new File(localDir, ContainerLocalizer.USERCACHE);
     File userDir = new File(userCacheDir, user);
     File appCache = new File(userDir, ContainerLocalizer.APPCACHE);
@@ -303,7 +288,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
         recordFactory.newRecordInstance(ContainerLaunchContext.class);
 
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(localFS
+        URL.fromPath(localFS
             .makeQualified(new Path(scriptFile.getAbsolutePath())));
     LocalResource rsrc_alpha =
         recordFactory.newRecordInstance(LocalResource.class);
@@ -410,7 +395,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
 			  recordFactory.newRecordInstance(ContainerLaunchContext.class);
 
 	  URL resource_alpha =
-			  ConverterUtils.getYarnUrlFromPath(localFS
+			  URL.fromPath(localFS
 					  .makeQualified(new Path(scriptFile.getAbsolutePath())));
 	  LocalResource rsrc_alpha =
 			  recordFactory.newRecordInstance(LocalResource.class);
@@ -503,7 +488,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
 //    containerLaunchContext.resources =
 //        new HashMap<CharSequence, LocalResource>();
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(FileContext.getLocalFSFileContext()
+        URL.fromPath(FileContext.getLocalFSFileContext()
             .makeQualified(new Path(file.getAbsolutePath())));
     LocalResource rsrc_alpha = recordFactory.newRecordInstance(LocalResource.class);
     rsrc_alpha.setResource(resource_alpha);
@@ -536,8 +521,8 @@ public class TestContainerManager extends BaseContainerManagerTest {
         ApplicationState.RUNNING);
 
     // Now ascertain that the resources are localised correctly.
-    String appIDStr = ConverterUtils.toString(appId);
-    String containerIDStr = ConverterUtils.toString(cId);
+    String appIDStr = appId.toString();
+    String containerIDStr = cId.toString();
     File userCacheDir = new File(localDir, ContainerLocalizer.USERCACHE);
     File userDir = new File(userCacheDir, user);
     File appCache = new File(userDir, ContainerLocalizer.APPCACHE);
@@ -990,7 +975,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ContainerLaunchContext containerLaunchContext =
         recordFactory.newRecordInstance(ContainerLaunchContext.class);
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(localFS
+        URL.fromPath(localFS
             .makeQualified(new Path(scriptFile.getAbsolutePath())));
     LocalResource rsrc_alpha =
         recordFactory.newRecordInstance(LocalResource.class);
@@ -1074,7 +1059,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ContainerLaunchContext containerLaunchContext =
         recordFactory.newRecordInstance(ContainerLaunchContext.class);
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(localFS
+        URL.fromPath(localFS
             .makeQualified(new Path(scriptFile.getAbsolutePath())));
     LocalResource rsrc_alpha =
         recordFactory.newRecordInstance(LocalResource.class);
@@ -1153,53 +1138,6 @@ public class TestContainerManager extends BaseContainerManagerTest {
     assertEquals(targetResource, containerStatus.getCapability());
   }
 
-  public static Token createContainerToken(ContainerId cId, long rmIdentifier,
-      NodeId nodeId, String user,
-      NMContainerTokenSecretManager containerTokenSecretManager)
-      throws IOException {
-    return createContainerToken(cId, rmIdentifier, nodeId, user,
-      containerTokenSecretManager, null);
-  }
-
-  public static Token createContainerToken(ContainerId cId, long rmIdentifier,
-      NodeId nodeId, String user,
-      NMContainerTokenSecretManager containerTokenSecretManager,
-      LogAggregationContext logAggregationContext)
-      throws IOException {
-    Resource r = BuilderUtils.newResource(1024, 1);
-    return createContainerToken(cId, rmIdentifier, nodeId, user, r,
-        containerTokenSecretManager, logAggregationContext);
-  }
-
-  public static Token createContainerToken(ContainerId cId, long rmIdentifier,
-      NodeId nodeId, String user, Resource resource,
-      NMContainerTokenSecretManager containerTokenSecretManager,
-      LogAggregationContext logAggregationContext)
-      throws IOException {
-    ContainerTokenIdentifier containerTokenIdentifier =
-        new ContainerTokenIdentifier(cId, nodeId.toString(), user, resource,
-          System.currentTimeMillis() + 100000L, 123, rmIdentifier,
-          Priority.newInstance(0), 0, logAggregationContext, null);
-    return BuilderUtils.newContainerToken(nodeId, containerTokenSecretManager
-        .retrievePassword(containerTokenIdentifier),
-            containerTokenIdentifier);
-  }
-
-  public static Token createContainerToken(ContainerId cId, long rmIdentifier,
-      NodeId nodeId, String user, Resource resource,
-      NMContainerTokenSecretManager containerTokenSecretManager,
-      LogAggregationContext logAggregationContext, ExecutionType executionType)
-      throws IOException {
-    ContainerTokenIdentifier containerTokenIdentifier =
-        new ContainerTokenIdentifier(cId, nodeId.toString(), user, resource,
-            System.currentTimeMillis() + 100000L, 123, rmIdentifier,
-            Priority.newInstance(0), 0, logAggregationContext, null,
-            ContainerType.TASK, executionType);
-    return BuilderUtils.newContainerToken(nodeId, containerTokenSecretManager
-            .retrievePassword(containerTokenIdentifier),
-        containerTokenIdentifier);
-  }
-
   @Test
   public void testOutputThreadDumpSignal() throws IOException,
       InterruptedException, YarnException {
@@ -1243,7 +1181,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ContainerId cId = createContainerId(0);
 
     URL resource_alpha =
-        ConverterUtils.getYarnUrlFromPath(localFS
+        URL.fromPath(localFS
             .makeQualified(new Path(scriptFile.getAbsolutePath())));
     LocalResource rsrc_alpha =
         recordFactory.newRecordInstance(LocalResource.class);

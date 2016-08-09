@@ -86,21 +86,22 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
     // Lots of properties not in the above classes
     xmlPropsToSkipCompare.add("fs.ftp.password.localhost");
     xmlPropsToSkipCompare.add("fs.ftp.user.localhost");
-    xmlPropsToSkipCompare.add("fs.s3.block.size");
     xmlPropsToSkipCompare.add("hadoop.tmp.dir");
     xmlPropsToSkipCompare.add("nfs3.mountd.port");
     xmlPropsToSkipCompare.add("nfs3.server.port");
-    xmlPropsToSkipCompare.add("test.fs.s3.name");
     xmlPropsToSkipCompare.add("test.fs.s3n.name");
 
-    // S3/S3A properties are in a different subtree.
-    // - org.apache.hadoop.fs.s3.S3FileSystemConfigKeys
+    // S3N/S3A properties are in a different subtree.
     // - org.apache.hadoop.fs.s3native.S3NativeFileSystemConfigKeys
-    xmlPrefixToSkipCompare.add("fs.s3.");
     xmlPrefixToSkipCompare.add("fs.s3a.");
     xmlPrefixToSkipCompare.add("fs.s3n.");
-    xmlPrefixToSkipCompare.add("s3.");
     xmlPrefixToSkipCompare.add("s3native.");
+
+    // ADL properties are in a different subtree
+    // - org.apache.hadoop.hdfs.web.ADLConfKeys
+    xmlPrefixToSkipCompare.add("adl.");
+    xmlPropsToSkipCompare.add("fs.adl.impl");
+    xmlPropsToSkipCompare.add("fs.AbstractFileSystem.adl.impl");
 
     // Deprecated properties.  These should eventually be removed from the
     // class.

@@ -80,14 +80,14 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
       Resource capability, int numContainers, boolean relaxLocality,
       String labelExpression) {
     return newInstance(priority, hostName, capability, numContainers,
-        relaxLocality, labelExpression, ExecutionType.GUARANTEED);
+        relaxLocality, labelExpression, ExecutionTypeRequest.newInstance());
   }
 
   @Public
-  @Stable
+  @Evolving
   public static ResourceRequest newInstance(Priority priority, String hostName,
       Resource capability, int numContainers, boolean relaxLocality, String
-      labelExpression, ExecutionType execType) {
+      labelExpression, ExecutionTypeRequest executionTypeRequest) {
     ResourceRequest request = Records.newRecord(ResourceRequest.class);
     request.setPriority(priority);
     request.setResourceName(hostName);
@@ -95,7 +95,7 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
     request.setNumContainers(numContainers);
     request.setRelaxLocality(relaxLocality);
     request.setNodeLabelExpression(labelExpression);
-    request.setExecutionType(execType);
+    request.setExecutionTypeRequest(executionTypeRequest);
     return request;
   }
 
@@ -115,6 +115,10 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
         String h1 = r1.getResourceName();
         String h2 = r2.getResourceName();
         ret = h1.compareTo(h2);
+      }
+      if (ret == 0) {
+        ret = r1.getExecutionTypeRequest()
+            .compareTo(r2.getExecutionTypeRequest());
       }
       if (ret == 0) {
         ret = r1.getCapability().compareTo(r2.getCapability());
@@ -233,14 +237,16 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
   public abstract boolean getRelaxLocality();
 
   /**
-   * Set the <code>ExecutionType</code> of the requested container.
+   * Set the <code>ExecutionTypeRequest</code> of the requested container.
    *
-   * @param execType
-   *          ExecutionType of the requested container
+   * @param execSpec
+   *          ExecutionTypeRequest of the requested container
    */
   @Public
-  @Stable
-  public abstract void setExecutionType(ExecutionType execType);
+  @Evolving
+  public void setExecutionTypeRequest(ExecutionTypeRequest execSpec) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Get whether locality relaxation is enabled with this
@@ -250,8 +256,10 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
    * <code>ResourceRequest</code>.
    */
   @Public
-  @Stable
-  public abstract ExecutionType getExecutionType();
+  @Evolving
+  public ExecutionTypeRequest getExecutionTypeRequest() {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * <p>For a request at a network hierarchy level, set whether locality can be relaxed
@@ -308,6 +316,58 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
   @Public
   @Evolving
   public abstract void setNodeLabelExpression(String nodelabelExpression);
+
+  /**
+   * Get the optional <em>ID</em> corresponding to this allocation request. This
+   * ID is an identifier for different {@code ResourceRequest}s from the <b>same
+   * application</b>. The allocated {@code Container}(s) received as part of the
+   * {@code AllocateResponse} response will have the ID corresponding to the
+   * original {@code ResourceRequest} for which the RM made the allocation.
+   * <p>
+   * The scheduler may return multiple {@code AllocateResponse}s corresponding
+   * to the same ID as and when scheduler allocates {@code Container}(s).
+   * <b>Applications</b> can continue to completely ignore the returned ID in
+   * the response and use the allocation for any of their outstanding requests.
+   * <p>
+   * If one wishes to replace an entire {@code ResourceRequest} corresponding to
+   * a specific ID, they can simply cancel the corresponding {@code
+   * ResourceRequest} and submit a new one afresh.
+   *
+   * @return the <em>ID</em> corresponding to this allocation request.
+   */
+  @Public
+  @Evolving
+  public long getAllocationRequestId() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Set the optional <em>ID</em> corresponding to this allocation request. This
+   * ID is an identifier for different {@code ResourceRequest}s from the <b>same
+   * application</b>. The allocated {@code Container}(s) received as part of the
+   * {@code AllocateResponse} response will have the ID corresponding to the
+   * original {@code ResourceRequest} for which the RM made the allocation.
+   * <p>
+   * The scheduler may return multiple {@code AllocateResponse}s corresponding
+   * to the same ID as and when scheduler allocates {@code Container}(s).
+   * <b>Applications</b> can continue to completely ignore the returned ID in
+   * the response and use the allocation for any of their outstanding requests.
+   * <p>
+   * If one wishes to replace an entire {@code ResourceRequest} corresponding to
+   * a specific ID, they can simply cancel the corresponding {@code
+   * ResourceRequest} and submit a new one afresh.
+   * <p>
+   * If the ID is not set, scheduler will continue to work as previously and all
+   * allocated {@code Container}(s) will have the default ID, -1.
+   *
+   * @param allocationRequestID the <em>ID</em> corresponding to this allocation
+   *                            request.
+   */
+  @Public
+  @Evolving
+  public void setAllocationRequestId(long allocationRequestID) {
+    throw new UnsupportedOperationException();
+  }
   
   @Override
   public int hashCode() {
@@ -353,12 +413,13 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
         return false;
     } else if (!priority.equals(other.getPriority()))
       return false;
-    ExecutionType executionType = getExecutionType();
-    if (executionType == null) {
-      if (other.getExecutionType() != null) {
+    ExecutionTypeRequest execTypeRequest = getExecutionTypeRequest();
+    if (execTypeRequest == null) {
+      if (other.getExecutionTypeRequest() != null) {
         return false;
       }
-    } else if (executionType != other.getExecutionType()) {
+    } else if (!execTypeRequest.getExecutionType()
+        .equals(other.getExecutionTypeRequest().getExecutionType())) {
       return false;
     }
     if (getNodeLabelExpression() == null) {
@@ -385,12 +446,18 @@ public abstract class ResourceRequest implements Comparable<ResourceRequest> {
       int hostNameComparison =
           this.getResourceName().compareTo(other.getResourceName());
       if (hostNameComparison == 0) {
-        int capabilityComparison =
-            this.getCapability().compareTo(other.getCapability());
-        if (capabilityComparison == 0) {
-          return this.getNumContainers() - other.getNumContainers();
+        int execTypeReqComparison = this.getExecutionTypeRequest()
+            .compareTo(other.getExecutionTypeRequest());
+        if (execTypeReqComparison == 0) {
+          int capabilityComparison =
+              this.getCapability().compareTo(other.getCapability());
+          if (capabilityComparison == 0) {
+            return this.getNumContainers() - other.getNumContainers();
+          } else {
+            return capabilityComparison;
+          }
         } else {
-          return capabilityComparison;
+          return execTypeReqComparison;
         }
       } else {
         return hostNameComparison;

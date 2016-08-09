@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.webapp;
 
+import static org.apache.hadoop.yarn.webapp.WebServicesTestUtils.assertResponseStatusCode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -26,22 +27,19 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringReader;
-
 import javax.ws.rs.core.MediaType;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
-import org.junit.Assert;
-
+import org.apache.hadoop.yarn.webapp.GuiceServletConfig;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.NodeHealthScriptRunner;
 import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
-import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
@@ -60,9 +58,11 @@ import org.apache.hadoop.yarn.webapp.GenericExceptionHandler;
 import org.apache.hadoop.yarn.webapp.JerseyTestBase;
 import org.apache.hadoop.yarn.webapp.WebApp;
 import org.apache.hadoop.yarn.webapp.WebServicesTestUtils;
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.w3c.dom.Document;
@@ -71,8 +71,6 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import com.google.inject.Guice;
-import com.google.inject.Injector;
-import com.google.inject.servlet.GuiceServletContextListener;
 import com.google.inject.servlet.ServletModule;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.ClientResponse.Status;
@@ -97,7 +95,7 @@ public class TestNMWebServices extends JerseyTestBase {
   private static File testLogDir = new File("target",
       TestNMWebServices.class.getSimpleName() + "LogDir");
 
-  private Injector injector = Guice.createInjector(new ServletModule() {
+  private static class WebServletModule extends ServletModule {
 
     @Override
     protected void configureServlets() {
@@ -110,7 +108,7 @@ public class TestNMWebServices extends JerseyTestBase {
       healthChecker.init(conf);
       aclsManager = new ApplicationACLsManager(conf);
       nmContext = new NodeManager.NMContext(null, null, dirsHandler,
-          aclsManager, null, false);
+          aclsManager, null, false, conf);
       NodeId nodeId = NodeId.newInstance("testhost.foo.com", 8042);
       ((NodeManager.NMContext)nmContext).setNodeId(nodeId);
       resourceView = new ResourceView() {
@@ -150,14 +148,11 @@ public class TestNMWebServices extends JerseyTestBase {
 
       serve("/*").with(GuiceContainer.class);
     }
-  });
+  };
 
-  public class GuiceServletConfig extends GuiceServletContextListener {
-
-    @Override
-    protected Injector getInjector() {
-      return injector;
-    }
+  static {
+    GuiceServletConfig.setInjector(
+        Guice.createInjector(new WebServletModule()));
   }
 
   @Before
@@ -166,6 +161,8 @@ public class TestNMWebServices extends JerseyTestBase {
     super.setUp();
     testRootDir.mkdirs();
     testLogDir.mkdir();
+    GuiceServletConfig.setInjector(
+        Guice.createInjector(new WebServletModule()));
   }
 
   @AfterClass
@@ -192,7 +189,7 @@ public class TestNMWebServices extends JerseyTestBase {
       fail("should have thrown exception on invalid uri");
     } catch (UniformInterfaceException ue) {
       ClientResponse response = ue.getResponse();
-      assertEquals(Status.NOT_FOUND, response.getClientResponseStatus());
+      assertResponseStatusCode(Status.NOT_FOUND, response.getStatusInfo());
       WebServicesTestUtils.checkStringMatch(
           "error string exists and shouldn't", "", responseStr);
     }
@@ -208,8 +205,8 @@ public class TestNMWebServices extends JerseyTestBase {
       fail("should have thrown exception on invalid uri");
     } catch (UniformInterfaceException ue) {
       ClientResponse response = ue.getResponse();
-      assertEquals(Status.INTERNAL_SERVER_ERROR,
-          response.getClientResponseStatus());
+      assertResponseStatusCode(Status.INTERNAL_SERVER_ERROR,
+          response.getStatusInfo());
       WebServicesTestUtils.checkStringMatch(
           "error string exists and shouldn't", "", responseStr);
     }
@@ -224,7 +221,7 @@ public class TestNMWebServices extends JerseyTestBase {
       fail("should have thrown exception on invalid uri");
     } catch (UniformInterfaceException ue) {
       ClientResponse response = ue.getResponse();
-      assertEquals(Status.NOT_FOUND, response.getClientResponseStatus());
+      assertResponseStatusCode(Status.NOT_FOUND, response.getStatusInfo());
       WebServicesTestUtils.checkStringMatch(
           "error string exists and shouldn't", "", responseStr);
     }
@@ -313,14 +310,30 @@ public class TestNMWebServices extends JerseyTestBase {
     assertEquals("incorrect number of elements", 1, nodes.getLength());
     verifyNodesXML(nodes);
   }
-  
-  @Test
-  public void testContainerLogs() throws IOException {
-    WebResource r = resource();
+
+  @Test (timeout = 5000)
+  public void testContainerLogsWithNewAPI() throws IOException, JSONException{
     final ContainerId containerId = BuilderUtils.newContainerId(0, 0, 0, 0);
-    final String containerIdStr = BuilderUtils.newContainerId(0, 0, 0, 0)
-        .toString();
-    final ApplicationAttemptId appAttemptId = containerId.getApplicationAttemptId();
+    WebResource r = resource();
+    r = r.path("ws").path("v1").path("node").path("containers")
+        .path(containerId.toString()).path("logs");
+    testContainerLogs(r, containerId);
+  }
+
+  @Test (timeout = 5000)
+  public void testContainerLogsWithOldAPI() throws IOException, JSONException{
+    final ContainerId containerId = BuilderUtils.newContainerId(1, 1, 0, 1);
+    WebResource r = resource();
+    r = r.path("ws").path("v1").path("node").path("containerlogs")
+        .path(containerId.toString());
+    testContainerLogs(r, containerId);
+  }
+
+  private void testContainerLogs(WebResource r, ContainerId containerId)
+      throws IOException, JSONException {
+    final String containerIdStr = containerId.toString();
+    final ApplicationAttemptId appAttemptId = containerId
+        .getApplicationAttemptId();
     final ApplicationId appId = appAttemptId.getApplicationId();
     final String appIdStr = appId.toString();
     final String filename = "logfile1";
@@ -346,35 +359,93 @@ public class TestNMWebServices extends JerseyTestBase {
     pw.close();
 
     // ask for it
-    ClientResponse response = r.path("ws").path("v1").path("node")
-        .path("containerlogs").path(containerIdStr).path(filename)
+    ClientResponse response = r.path(filename)
         .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
     String responseText = response.getEntity(String.class);
     assertEquals(logMessage, responseText);
+    int fullTextSize = responseText.getBytes().length;
+
+    // specify how many bytes we should get from logs
+    // specify a position number, it would get the first n bytes from
+    // container log
+    response = r.path(filename)
+        .queryParam("size", "5")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    responseText = response.getEntity(String.class);
+    assertEquals(5, responseText.getBytes().length);
+    assertEquals(new String(logMessage.getBytes(), 0, 5), responseText);
+    assertTrue(fullTextSize >= responseText.getBytes().length);
+
+    // specify the bytes which is larger than the actual file size,
+    // we would get the full logs
+    response = r.path(filename)
+        .queryParam("size", "10000")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    responseText = response.getEntity(String.class);
+    assertEquals(fullTextSize, responseText.getBytes().length);
+    assertEquals(logMessage, responseText);
+
+    // specify a negative number, it would get the last n bytes from
+    // container log
+    response = r.path(filename)
+        .queryParam("size", "-5")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    responseText = response.getEntity(String.class);
+    assertEquals(5, responseText.getBytes().length);
+    assertEquals(new String(logMessage.getBytes(),
+        logMessage.getBytes().length - 5, 5), responseText);
+    assertTrue(fullTextSize >= responseText.getBytes().length);
+
+    response = r.path(filename)
+        .queryParam("size", "-10000")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    responseText = response.getEntity(String.class);
+    assertEquals("text/plain", response.getType().toString());
+    assertEquals(fullTextSize, responseText.getBytes().length);
+    assertEquals(logMessage, responseText);
 
     // ask and download it
-    response = r.path("ws").path("v1").path("node").path("containerlogs")
-        .path(containerIdStr).path(filename).queryParam("download", "true")
+    response = r.path(filename)
+        .queryParam("format", "octet-stream")
         .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
     responseText = response.getEntity(String.class);
     assertEquals(logMessage, responseText);
     assertEquals(200, response.getStatus());
     assertEquals("application/octet-stream", response.getType().toString());
 
-    // ask for file that doesn't exist
-    response = r.path("ws").path("v1").path("node")
-        .path("containerlogs").path(containerIdStr).path("uhhh")
+    // specify a invalid format value
+    response = r.path(filename)
+        .queryParam("format", "123")
         .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
-    Assert.assertEquals(Status.NOT_FOUND.getStatusCode(), response.getStatus());
+    responseText = response.getEntity(String.class);
+    assertEquals("The valid values for the parameter : format are "
+        + WebAppUtils.listSupportedLogContentType(), responseText);
+    assertEquals(400, response.getStatus());
+
+    // ask for file that doesn't exist
+    response = r.path("uhhh")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    assertEquals(Status.NOT_FOUND.getStatusCode(),
+        response.getStatus());
     responseText = response.getEntity(String.class);
     assertTrue(responseText.contains("Cannot find this log on the local disk."));
-    
+
+    // Get container log files' name
+    WebResource r1 = resource();
+    response = r1.path("ws").path("v1").path("node")
+        .path("containers").path(containerIdStr)
+        .path("logs").accept(MediaType.APPLICATION_JSON)
+        .get(ClientResponse.class);
+    assertEquals(200, response.getStatus());
+    JSONObject json = response.getEntity(JSONObject.class);
+    assertEquals(json.getJSONObject("containerLogInfo")
+        .getString("fileName"), filename);
+
     // After container is completed, it is removed from nmContext
     nmContext.getContainers().remove(containerId);
     Assert.assertNull(nmContext.getContainers().get(containerId));
     response =
-        r.path("ws").path("v1").path("node").path("containerlogs")
-            .path(containerIdStr).path(filename).accept(MediaType.TEXT_PLAIN)
+        r.path(filename).accept(MediaType.TEXT_PLAIN)
             .get(ClientResponse.class);
     responseText = response.getEntity(String.class);
     assertEquals(logMessage, responseText);

@@ -866,7 +866,7 @@ public class FairScheduler extends
     FSSchedulerNode node = getFSSchedulerNode(container.getNodeId());
 
     if (rmContainer.getState() == RMContainerState.RESERVED) {
-      application.unreserve(rmContainer.getReservedPriority(), node);
+      application.unreserve(rmContainer.getReservedSchedulerKey(), node);
     } else {
       application.containerCompleted(rmContainer, containerStatus, event);
       node.releaseContainer(container);
@@ -993,13 +993,7 @@ public class FairScheduler extends
         preemptionContainerIds.add(container.getContainerId());
       }
 
-      if (application.isWaitingForAMContainer()) {
-        // Allocate is for AM and update AM blacklist for this
-        application.updateAMBlacklist(
-            blacklistAdditions, blacklistRemovals);
-      } else {
-        application.updateBlacklist(blacklistAdditions, blacklistRemovals);
-      }
+      application.updateBlacklist(blacklistAdditions, blacklistRemovals);
 
       List<Container> newlyAllocatedContainers =
           application.pullNewlyAllocatedContainers();

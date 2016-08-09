@@ -166,6 +166,52 @@
 </property>
 
 <property>
+  <name>hadoop.security.groups.cache.background.reload</name>
+  <value>false</value>
+  <description>
+    Whether to reload expired user->group mappings using a background thread
+    pool. If set to true, a pool of
+    hadoop.security.groups.cache.background.reload.threads is created to
+    update the cache in the background.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.groups.cache.background.reload.threads</name>
+  <value>3</value>
+  <description>
+    Only relevant if hadoop.security.groups.cache.background.reload is true.
+    Controls the number of concurrent background user->group cache entry
+    refreshes. Pending refresh requests beyond this value are queued and
+    processed when a thread is free.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.group.mapping.ldap.connection.timeout.ms</name>
+  <value>60000</value>
+  <description>
+    This property is the connection timeout (in milliseconds) for LDAP
+    operations. If the LDAP provider doesn't establish a connection within the
+    specified period, it will abort the connect attempt. Non-positive value
+    means no LDAP connection timeout is specified in which case it waits for the
+    connection to establish until the underlying network times out.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.group.mapping.ldap.read.timeout.ms</name>
+  <value>60000</value>
+  <description>
+    This property is the read timeout (in milliseconds) for LDAP
+    operations. If the LDAP provider doesn't get a LDAP response within the
+    specified period, it will abort the read attempt. Non-positive value
+    means no read timeout is specified in which case it waits for the response
+    infinitely.
+  </description>
+</property>
+
+<property>
   <name>hadoop.security.group.mapping.ldap.url</name>
   <value></value>
   <description>
@@ -288,6 +334,19 @@
   <description>
     The attribute of the group object that identifies the group name. The
     default will usually be appropriate for all LDAP systems.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.group.mapping.ldap.search.group.hierarchy.levels</name>
+  <value>0</value>
+  <description>
+    The number of levels to go up the group hierarchy when determining
+    which groups a user is part of. 0 Will represent checking just the
+    group that the user belongs to.  Each additional level will raise the
+    time it takes to exectue a query by at most
+    hadoop.security.group.mapping.ldap.directory.search.timeout.
+    The default will usually be appropriate for all LDAP systems.
   </description>
 </property>
 
@@ -650,32 +709,16 @@
 </property>
 
 <property>
-  <name>fs.s3.awsAccessKeyId</name>
-  <description>AWS access key ID used by S3 block file system.</description>
-</property>
-
-<property>
-  <name>fs.s3.awsSecretAccessKey</name>
-  <description>AWS secret key used by S3 block file system.</description>
-</property>
-
-<property>
-  <name>fs.s3.block.size</name>
-  <value>67108864</value>
-  <description>Block size to use when writing files to S3.</description>
-</property>
-
-<property>
-  <name>fs.s3.buffer.dir</name>
-  <value>${hadoop.tmp.dir}/s3</value>
-  <description>Determines where on the local filesystem the s3:/s3n: filesystem
+  <name>fs.s3n.buffer.dir</name>
+  <value>${hadoop.tmp.dir}/s3n</value>
+  <description>Determines where on the local filesystem the s3n:// filesystem
   should store files before sending them to S3
   (or after retrieving them from S3).
   </description>
 </property>
 
 <property>
-  <name>fs.s3.maxRetries</name>
+  <name>fs.s3n.maxRetries</name>
   <value>4</value>
   <description>The maximum number of retries for reading or writing files to S3, 
   before we signal failure to the application.
@@ -683,7 +726,7 @@
 </property>
 
 <property>
-  <name>fs.s3.sleepTimeSeconds</name>
+  <name>fs.s3n.sleepTimeSeconds</name>
   <value>10</value>
   <description>The number of seconds to sleep between each S3 retry.
   </description>
@@ -767,7 +810,23 @@
 
 <property>
   <name>fs.s3a.aws.credentials.provider</name>
-  <description>Class name of a credentials provider that implements com.amazonaws.auth.AWSCredentialsProvider. Omit if using access/secret keys or another authentication mechanism.</description>
+  <description>
+    Class name of a credentials provider that implements
+    com.amazonaws.auth.AWSCredentialsProvider.  Omit if using access/secret keys
+    or another authentication mechanism.  The specified class must provide an
+    accessible constructor accepting java.net.URI and
+    org.apache.hadoop.conf.Configuration, or an accessible default constructor.
+    Specifying org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider allows
+    anonymous access to a publicly accessible S3 bucket without any credentials.
+    Please note that allowing anonymous access to an S3 bucket compromises
+    security and therefore is unsuitable for most use cases.  It can be useful
+    for accessing public data sets without requiring AWS credentials.
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.session.token</name>
+  <description>The session token used with temporary credentials. Used only with provider org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider.</description>
 </property>
 
 <property>
@@ -792,6 +851,7 @@
 
 <property>
   <name>fs.s3a.path.style.access</name>
+  <value>false</value>
   <description>Enable S3 path style access ie disabling the default virtual hosting behaviour.
     Useful for S3A-compliant storage providers as it removes the need to set up DNS for virtual hosting.
   </description>
@@ -845,6 +905,18 @@
   <name>fs.s3a.connection.timeout</name>
   <value>200000</value>
   <description>Socket connection timeout in milliseconds.</description>
+</property>
+
+<property>
+  <name>fs.s3a.socket.send.buffer</name>
+  <value>8192</value>
+  <description>Socket send buffer hint to amazon connector. Represented in bytes.</description>
+</property>
+
+<property>
+  <name>fs.s3a.socket.recv.buffer</name>
+  <value>8192</value>
+  <description>Socket receive buffer hint to amazon connector. Represented in bytes.</description>
 </property>
 
 <property>
@@ -1298,42 +1370,6 @@
 <property>
   <name>file.replication</name>
   <value>1</value>
-  <description>Replication factor</description>
-</property>
-
-<!-- s3 File System -->
-
-<property>
-  <name>s3.stream-buffer-size</name>
-  <value>4096</value>
-  <description>The size of buffer to stream files.
-  The size of this buffer should probably be a multiple of hardware
-  page size (4096 on Intel x86), and it determines how much data is
-  buffered during read and write operations.</description>
-</property>
-
-<property>
-  <name>s3.bytes-per-checksum</name>
-  <value>512</value>
-  <description>The number of bytes per checksum.  Must not be larger than
-  s3.stream-buffer-size</description>
-</property>
-
-<property>
-  <name>s3.client-write-packet-size</name>
-  <value>65536</value>
-  <description>Packet size for clients to write</description>
-</property>
-
-<property>
-  <name>s3.blocksize</name>
-  <value>67108864</value>
-  <description>Block size</description>
-</property>
-
-<property>
-  <name>s3.replication</name>
-  <value>3</value>
   <description>Replication factor</description>
 </property>
 
@@ -2173,4 +2209,64 @@
       needs to be specified in net.topology.script.file.name.
     </description>
   </property>
+
+
+  <!-- Azure Data Lake File System Configurations -->
+
+  <property>
+    <name>adl.feature.override.readahead</name>
+    <value>true</value>
+    <description>
+      Enables read aheads in the ADL client, the feature is used to
+      improve read throughput.
+      This works in conjunction with the value set in
+      adl.feature.override.readahead.max.buffersize.
+      When set to false the read ahead feature is turned off.
+      Default : True if not configured.
+    </description>
+  </property>
+
+  <property>
+    <name>adl.feature.override.readahead.max.buffersize</name>
+    <value>8388608</value>
+    <description>
+      Define maximum buffer size to cache read ahead data, this is
+      allocated per process to
+      cache read ahead data. Applicable only when
+      adl.feature.override.readahead is set to true.
+      Default : 8388608 Byte i.e. 8MB if not configured.
+    </description>
+  </property>
+
+  <property>
+    <name>adl.feature.override.readahead.max.concurrent.connection</name>
+    <value>2</value>
+    <description>
+      Define maximum concurrent connection can be established to
+      read ahead. If the data size is less than 4MB then only 1 read n/w
+      connection
+      is set. If the data size is less than 4MB but less than 8MB then 2 read
+      n/w connection
+      is set. Data greater than 8MB then value set under the property would
+      take
+      effect. Applicable only when adl.feature.override.readahead is set
+      to true and buffer size is greater than 8MB.
+      It is recommended to reset this property if the
+      adl.feature.override.readahead.max.buffersize
+      is less than 8MB to gain performance. Application has to consider
+      throttling limit for the account as well before configuring large
+      buffer size.
+    </description>
+  </property>
+
+  <property>
+    <name>fs.adl.impl</name>
+    <value>org.apache.hadoop.fs.adl.AdlFileSystem</value>
+  </property>
+
+  <property>
+    <name>fs.AbstractFileSystem.adl.impl</name>
+    <value>org.apache.hadoop.fs.adl.Adl</value>
+  </property>
+
 </configuration>

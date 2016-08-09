@@ -63,7 +63,6 @@ import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerSignalContext
 import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerStartContext;
 import org.apache.hadoop.yarn.server.nodemanager.executor.DeletionAsUserContext;
 import org.apache.hadoop.yarn.server.nodemanager.executor.LocalizerStartContext;
-import org.apache.hadoop.yarn.util.ConverterUtils;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -195,9 +194,9 @@ public class DockerContainerExecutor extends ContainerExecutor {
     ContainerId containerId = container.getContainerId();
 
     // create container dirs on all disks
-    String containerIdStr = ConverterUtils.toString(containerId);
-    String appIdStr = ConverterUtils.toString(
-      containerId.getApplicationAttemptId().getApplicationId());
+    String containerIdStr = containerId.toString();
+    String appIdStr =
+        containerId.getApplicationAttemptId().getApplicationId().toString();
     for (String sLocalDir : localDirs) {
       Path usersdir = new Path(sLocalDir, ContainerLocalizer.USERCACHE);
       Path userdir = new Path(usersdir, userName);

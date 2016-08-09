@@ -21,16 +21,26 @@ package org.apache.hadoop.fs.s3a;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.s3native.S3xLoginHelper;
+import org.apache.hadoop.security.ProviderUtils;
 
 import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.AccessDeniedException;
+import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
+import static org.apache.hadoop.fs.s3a.Constants.ACCESS_KEY;
+import static org.apache.hadoop.fs.s3a.Constants.SECRET_KEY;
 
 /**
  * Utility methods for S3A code.
@@ -185,5 +195,89 @@ public final class S3AUtils {
       }
     }
     return builder.toString();
+  }
+
+  /**
+   * Create a files status instance from a listing.
+   * @param keyPath path to entry
+   * @param summary summary from AWS
+   * @param blockSize block size to declare.
+   * @return a status entry
+   */
+  public static S3AFileStatus createFileStatus(Path keyPath,
+      S3ObjectSummary summary,
+      long blockSize) {
+    if (objectRepresentsDirectory(summary.getKey(), summary.getSize())) {
+      return new S3AFileStatus(true, true, keyPath);
+    } else {
+      return new S3AFileStatus(summary.getSize(),
+          dateToLong(summary.getLastModified()), keyPath,
+          blockSize);
+    }
+  }
+
+  /**
+   * Predicate: does the object represent a directory?.
+   * @param name object name
+   * @param size object size
+   * @return true if it meets the criteria for being an object
+   */
+  public static boolean objectRepresentsDirectory(final String name,
+      final long size) {
+    return !name.isEmpty()
+        && name.charAt(name.length() - 1) == '/'
+        && size == 0L;
+  }
+
+  /**
+   * Date to long conversion.
+   * Handles null Dates that can be returned by AWS by returning 0
+   * @param date date from AWS query
+   * @return timestamp of the object
+   */
+  public static long dateToLong(final Date date) {
+    if (date == null) {
+      return 0L;
+    }
+
+    return date.getTime();
+  }
+
+  /**
+   * Return the access key and secret for S3 API use.
+   * Credentials may exist in configuration, within credential providers
+   * or indicated in the UserInfo of the name URI param.
+   * @param name the URI for which we need the access keys.
+   * @param conf the Configuration object to interrogate for keys.
+   * @return AWSAccessKeys
+   * @throws IOException problems retrieving passwords from KMS.
+   */
+  public static S3xLoginHelper.Login getAWSAccessKeys(URI name,
+      Configuration conf) throws IOException {
+    S3xLoginHelper.Login login =
+        S3xLoginHelper.extractLoginDetailsWithWarnings(name);
+    Configuration c = ProviderUtils.excludeIncompatibleCredentialProviders(
+        conf, S3AFileSystem.class);
+    String accessKey = getPassword(c, ACCESS_KEY, login.getUser());
+    String secretKey = getPassword(c, SECRET_KEY, login.getPassword());
+    return new S3xLoginHelper.Login(accessKey, secretKey);
+  }
+
+  private static String getPassword(Configuration conf, String key, String val)
+      throws IOException {
+    if (StringUtils.isEmpty(val)) {
+      try {
+        final char[] pass = conf.getPassword(key);
+        if (pass != null) {
+          return (new String(pass)).trim();
+        } else {
+          return "";
+        }
+      } catch (IOException ioe) {
+        throw new IOException("Cannot find password option " + key, ioe);
+      }
+    } else {
+      return val;
+    }
   }
 }

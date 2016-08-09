@@ -164,16 +164,16 @@ public class DFSAdmin extends FsShell {
     private static final String NAME = "setQuota";
     private static final String USAGE =
       "-"+NAME+" <quota> <dirname>...<dirname>";
-    private static final String DESCRIPTION = 
-      "-setQuota <quota> <dirname>...<dirname>: " +
-      "Set the quota <quota> for each directory <dirName>.\n" + 
-      "\t\tThe directory quota is a long integer that puts a hard limit\n" +
-      "\t\ton the number of names in the directory tree\n" +
-      "\t\tFor each directory, attempt to set the quota. An error will be reported if\n" +
-      "\t\t1. N is not a positive integer, or\n" +
-      "\t\t2. User is not an administrator, or\n" +
-      "\t\t3. The directory does not exist or is a file.\n" +
-      "\t\tNote: A quota of 1 would force the directory to remain empty.\n";
+    private static final String DESCRIPTION =
+        "-setQuota <quota> <dirname>...<dirname>: " +
+        "Set the quota <quota> for each directory <dirName>.\n" +
+        "\t\tThe directory quota is a long integer that puts a hard limit\n" +
+        "\t\ton the number of names in the directory tree\n" +
+        "\t\tFor each directory, attempt to set the quota. An error will be reported if\n" +
+        "\t\t1. quota is not a positive integer, or\n" +
+        "\t\t2. User is not an administrator, or\n" +
+        "\t\t3. The directory does not exist or is a file.\n" +
+        "\t\tNote: A quota of 1 would force the directory to remain empty.\n";
 
     private final long quota; // the quota to be set
 
@@ -211,12 +211,20 @@ public class DFSAdmin extends FsShell {
     private static final String NAME = "clrSpaceQuota";
     private static final String USAGE = "-"+NAME+" [-storageType <storagetype>] <dirname>...<dirname>";
     private static final String DESCRIPTION = USAGE + ": " +
-    "Clear the space quota for each directory <dirName>.\n" +
-    "\t\tFor each directory, attempt to clear the quota. An error will be reported if\n" +
-    "\t\t1. the directory does not exist or is a file, or\n" +
-    "\t\t2. user is not an administrator.\n" +
-    "\t\tIt does not fault if the directory has no quota.\n" +
-    "\t\tThe storage type specific quota is cleared when -storageType option is specified.";
+        "Clear the space quota for each directory <dirName>.\n" +
+        "\t\tFor each directory, attempt to clear the quota. " +
+        "An error will be reported if\n" +
+        "\t\t1. the directory does not exist or is a file, or\n" +
+        "\t\t2. user is not an administrator.\n" +
+        "\t\tIt does not fault if the directory has no quota.\n" +
+        "\t\tThe storage type specific quota is cleared when -storageType " +
+        "option is specified.\n" +
+        "\t\tAvailable storageTypes are \n" +
+        "\t\t- RAM_DISK\n" +
+        "\t\t- DISK\n" +
+        "\t\t- SSD\n" +
+        "\t\t- ARCHIVE";
+
 
     private StorageType type;
 
@@ -263,18 +271,23 @@ public class DFSAdmin extends FsShell {
     private static final String USAGE =
       "-"+NAME+" <quota> [-storageType <storagetype>] <dirname>...<dirname>";
     private static final String DESCRIPTION = USAGE + ": " +
-      "Set the space quota <quota> for each directory <dirName>.\n" +
-      "\t\tThe space quota is a long integer that puts a hard limit\n" +
-      "\t\ton the total size of all the files under the directory tree.\n" +
-      "\t\tThe extra space required for replication is also counted. E.g.\n" +
-      "\t\ta 1GB file with replication of 3 consumes 3GB of the quota.\n\n" +
-      "\t\tQuota can also be specified with a binary prefix for terabytes,\n" +
-      "\t\tpetabytes etc (e.g. 50t is 50TB, 5m is 5MB, 3p is 3PB).\n" + 
-      "\t\tFor each directory, attempt to set the quota. An error will be reported if\n" +
-      "\t\t1. N is not a positive integer, or\n" +
-      "\t\t2. user is not an administrator, or\n" +
-      "\t\t3. the directory does not exist or is a file.\n" +
-      "\t\tThe storage type specific quota is set when -storageType option is specified.\n";
+        "Set the space quota <quota> for each directory <dirName>.\n" +
+        "\t\tThe space quota is a long integer that puts a hard limit\n" +
+        "\t\ton the total size of all the files under the directory tree.\n" +
+        "\t\tThe extra space required for replication is also counted. E.g.\n" +
+        "\t\ta 1GB file with replication of 3 consumes 3GB of the quota.\n\n" +
+        "\t\tQuota can also be specified with a binary prefix for terabytes,\n" +
+        "\t\tpetabytes etc (e.g. 50t is 50TB, 5m is 5MB, 3p is 3PB).\n" +
+        "\t\tFor each directory, attempt to set the quota. An error will be reported if\n" +
+        "\t\t1. quota is not a positive integer or zero, or\n" +
+        "\t\t2. user is not an administrator, or\n" +
+        "\t\t3. the directory does not exist or is a file.\n" +
+        "\t\tThe storage type specific quota is set when -storageType option is specified.\n" +
+        "\t\tAvailable storageTypes are \n" +
+        "\t\t- RAM_DISK\n" +
+        "\t\t- DISK\n" +
+        "\t\t- SSD\n" +
+        "\t\t- ARCHIVE";
 
     private long quota; // the quota to be set
     private StorageType type;
@@ -569,7 +582,7 @@ public class DFSAdmin extends FsShell {
 
   /**
    * Safe mode maintenance command.
-   * Usage: hdfs dfsadmin -safemode [enter | leave | get]
+   * Usage: hdfs dfsadmin -safemode [enter | leave | get | wait | forceExit]
    * @param argv List of of command line parameters.
    * @param idx The index of the command that is being processed.
    * @exception IOException if the filesystem does not exist.
@@ -1805,7 +1818,8 @@ public class DFSAdmin extends FsShell {
                          + " [-refreshCallQueue]");
     } else if ("-reconfig".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
-          + " [-reconfig <namenode|datanode> <host:port> <start|status>]");
+          + " [-reconfig <namenode|datanode> <host:port> "
+          + "<start|status|properties>]");
     } else if ("-refresh".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refresh <hostname:port> <resource_identifier> [arg1..argn]");

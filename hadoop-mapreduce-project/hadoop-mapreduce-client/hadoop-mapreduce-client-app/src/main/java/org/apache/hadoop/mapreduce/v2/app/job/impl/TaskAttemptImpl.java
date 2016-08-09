@@ -135,7 +135,6 @@ import org.apache.hadoop.yarn.state.SingleArcTransition;
 import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
 import org.apache.hadoop.yarn.util.Clock;
-import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.RackResolver;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -667,7 +666,7 @@ public abstract class TaskAttemptImpl implements
 
     //TODO:create the resource reqt for this Task attempt
     this.resourceCapability = recordFactory.newRecordInstance(Resource.class);
-    this.resourceCapability.setMemory(
+    this.resourceCapability.setMemorySize(
         getMemoryRequired(conf, taskId.getTaskType()));
     this.resourceCapability.setVirtualCores(
         getCpuRequired(conf, taskId.getTaskType()));
@@ -713,8 +712,7 @@ public abstract class TaskAttemptImpl implements
       LocalResourceType type, LocalResourceVisibility visibility)
       throws IOException {
     FileStatus fstat = fc.getFileStatus(file);
-    URL resourceURL = ConverterUtils.getYarnUrlFromPath(fc.resolvePath(fstat
-        .getPath()));
+    URL resourceURL = URL.fromPath(fc.resolvePath(fstat.getPath()));
     long resourceSize = fstat.getLen();
     long resourceModificationTime = fstat.getModificationTime();
 
@@ -1247,8 +1245,8 @@ public abstract class TaskAttemptImpl implements
   public TaskAttemptStateInternal recover(TaskAttemptInfo taInfo,
       OutputCommitter committer, boolean recoverOutput) {
     ContainerId containerId = taInfo.getContainerId();
-    NodeId containerNodeId = ConverterUtils.toNodeId(taInfo.getHostname() + ":"
-        + taInfo.getPort());
+    NodeId containerNodeId = NodeId.fromString(
+        taInfo.getHostname() + ":" + taInfo.getPort());
     String nodeHttpAddress = StringInterner.weakIntern(taInfo.getHostname() + ":"
         + taInfo.getHttpPort());
     // Resource/Priority/Tokens are only needed while launching the container on
@@ -2115,7 +2113,7 @@ public abstract class TaskAttemptImpl implements
           taskAttempt.attemptId,
           taskAttempt.getAssignedContainerID(), taskAttempt.getAssignedContainerMgrAddress(),
           taskAttempt.container.getContainerToken(),
-          ContainerLauncher.EventType.CONTAINER_REMOTE_CLEANUP));
+          ContainerLauncher.EventType.CONTAINER_REMOTE_CLEANUP, false));
       taskAttempt.eventHandler.handle(new TaskTAttemptKilledEvent(
           taskAttempt.attemptId, false));
 
@@ -2179,7 +2177,8 @@ public abstract class TaskAttemptImpl implements
         taskAttempt.container.getId(), StringInterner
         .weakIntern(taskAttempt.container.getNodeId().toString()),
         taskAttempt.container.getContainerToken(),
-        ContainerLauncher.EventType.CONTAINER_REMOTE_CLEANUP));
+        ContainerLauncher.EventType.CONTAINER_REMOTE_CLEANUP,
+        event.getType() == TaskAttemptEventType.TA_TIMED_OUT));
   }
 
   /**

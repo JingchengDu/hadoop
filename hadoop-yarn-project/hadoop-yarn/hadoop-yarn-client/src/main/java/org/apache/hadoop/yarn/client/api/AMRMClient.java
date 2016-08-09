@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterRespo
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
+import org.apache.hadoop.yarn.api.records.ExecutionTypeRequest;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -50,6 +51,8 @@ import com.google.common.collect.ImmutableList;
 public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
     AbstractService {
   private static final Log LOG = LogFactory.getLog(AMRMClient.class);
+
+  private TimelineClient timelineClient;
 
   /**
    * Create a new instance of AMRMClient.
@@ -109,7 +112,7 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
     final Priority priority;
     final boolean relaxLocality;
     final String nodeLabelsExpression;
-    final ExecutionType executionType;
+    final ExecutionTypeRequest executionTypeRequest;
     
     /**
      * Instantiates a {@link ContainerRequest} with the given constraints and
@@ -180,7 +183,7 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
         Priority priority, boolean relaxLocality, String nodeLabelsExpression) {
       this(capability, nodes, racks, priority, relaxLocality,
           nodeLabelsExpression,
-          ExecutionType.GUARANTEED);
+          ExecutionTypeRequest.newInstance());
     }
           
     /**
@@ -203,12 +206,12 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
      * @param nodeLabelsExpression
      *          Set node labels to allocate resource, now we only support
      *          asking for only a single node label
-     * @param executionType
+     * @param executionTypeRequest
      *          Set the execution type of the container request.
      */
     public ContainerRequest(Resource capability, String[] nodes, String[] racks,
         Priority priority, boolean relaxLocality, String nodeLabelsExpression,
-        ExecutionType executionType) {
+        ExecutionTypeRequest executionTypeRequest) {
       // Validate request
       Preconditions.checkArgument(capability != null,
           "The Resource to be requested for each container " +
@@ -226,7 +229,7 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
       this.priority = priority;
       this.relaxLocality = relaxLocality;
       this.nodeLabelsExpression = nodeLabelsExpression;
-      this.executionType = executionType;
+      this.executionTypeRequest = executionTypeRequest;
     }
     
     public Resource getCapability() {
@@ -253,15 +256,16 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
       return nodeLabelsExpression;
     }
     
-    public ExecutionType getExecutionType() {
-      return executionType;
+    public ExecutionTypeRequest getExecutionTypeRequest() {
+      return executionTypeRequest;
     }
 
     public String toString() {
       StringBuilder sb = new StringBuilder();
       sb.append("Capability[").append(capability).append("]");
       sb.append("Priority[").append(priority).append("]");
-      sb.append("ExecutionType[").append(executionType).append("]");
+      sb.append("ExecutionTypeRequest[").append(executionTypeRequest)
+          .append("]");
       return sb.toString();
     }
   }
@@ -388,10 +392,35 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
    * collection, requests will be returned in the same order as they were added.
    * @return Collection of request matching the parameters
    */
+  @InterfaceStability.Evolving
   public abstract List<? extends Collection<T>> getMatchingRequests(
                                            Priority priority, 
                                            String resourceName, 
                                            Resource capability);
+
+  /**
+   * Get outstanding <code>ContainerRequest</code>s matching the given
+   * parameters. These ContainerRequests should have been added via
+   * <code>addContainerRequest</code> earlier in the lifecycle. For performance,
+   * the AMRMClient may return its internal collection directly without creating
+   * a copy. Users should not perform mutable operations on the return value.
+   * Each collection in the list contains requests with identical
+   * <code>Resource</code> size that fit in the given capability. In a
+   * collection, requests will be returned in the same order as they were added.
+   * specify an <code>ExecutionType</code> .
+   * @param priority Priority
+   * @param resourceName Location
+   * @param executionType ExecutionType
+   * @param capability Capability
+   * @return Collection of request matching the parameters
+   */
+  @InterfaceStability.Evolving
+  public List<? extends Collection<T>> getMatchingRequests(
+      Priority priority, String resourceName, ExecutionType executionType,
+      Resource capability) {
+    throw new UnsupportedOperationException("The sub-class extending" +
+        " AMRMClient is expected to implement this !!");
+  }
   
   /**
    * Update application's blacklist with addition or removal resources.
@@ -433,10 +462,26 @@ public abstract class AMRMClient<T extends AMRMClient.ContainerRequest> extends
   }
 
   /**
+   * Register TimelineClient to AMRMClient.
+   * @param client the timeline client to register
+   */
+  public void registerTimelineClient(TimelineClient client) {
+    this.timelineClient = client;
+  }
+
+  /**
+   * Get registered timeline client.
+   * @return the registered timeline client
+   */
+  public TimelineClient getRegisteredTimeineClient() {
+    return this.timelineClient;
+  }
+
+  /**
    * Wait for <code>check</code> to return true for each 1000 ms.
    * See also {@link #waitFor(com.google.common.base.Supplier, int)}
    * and {@link #waitFor(com.google.common.base.Supplier, int, int)}
-   * @param check
+   * @param check the condition for which it should wait
    */
   public void waitFor(Supplier<Boolean> check) throws InterruptedException {
     waitFor(check, 1000);
