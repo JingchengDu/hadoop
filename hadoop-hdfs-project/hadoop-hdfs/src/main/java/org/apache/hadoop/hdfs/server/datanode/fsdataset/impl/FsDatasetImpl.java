@@ -1420,7 +1420,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler createRbw(
+  public ReplicaHandler createRbw(
       StorageType storageType, ExtendedBlock b, boolean allowLazyPersist)
       throws IOException {
     FsVolumeImpl v = null;
@@ -1628,7 +1628,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       FsVolumeReference ref = null;
       synchronized (this) {
         ReplicaInfo currentReplicaInfo =
-          volumeMap.get(b.getBlockPoolId(), b.getBlockId());
+            volumeMap.get(b.getBlockPoolId(), b.getBlockId());
         if (currentReplicaInfo == lastFoundReplicaInfo) {
           if (lastFoundReplicaInfo != null) {
             invalidate(b.getBlockPoolId(), new Block[] { lastFoundReplicaInfo });
