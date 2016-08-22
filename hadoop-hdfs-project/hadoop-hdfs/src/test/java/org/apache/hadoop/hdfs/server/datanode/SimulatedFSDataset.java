@@ -1373,6 +1373,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
 
   @Override
   public AutoCloseableLock acquireDatasetLock() {
+    return acquireDatasetLock(false);
+  }
+
+  @Override
+  public AutoCloseableLock acquireDatasetLock(boolean readLock) {
     return datasetLock.acquire();
   }
 }
