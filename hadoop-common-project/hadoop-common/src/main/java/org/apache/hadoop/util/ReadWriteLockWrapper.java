@@ -42,6 +42,11 @@ public class ReadWriteLockWrapper {
     return writeLock;
   }
 
+  /**
+   * This is a wrap class of a ReentrantReadWriteLock.ReadLock.
+   * Extending AutoCloseableLock interface such that the users can use a
+   * try-with-resource syntax.
+   */
   public class AutoCloseableReadLock extends AutoCloseableLock {
     private final ReentrantReadWriteLock.ReadLock readLock;
 
@@ -76,6 +81,11 @@ public class ReadWriteLockWrapper {
     }
   }
 
+  /**
+   * This is a wrap class of a ReentrantReadWriteLock.WriteLock.
+   * Extending AutoCloseableLock interface such that the users can use a
+   * try-with-resource syntax.
+   */
   public class AutoCloseableWriteLock extends AutoCloseableLock {
     private final ReentrantReadWriteLock.WriteLock writeLock;
 
