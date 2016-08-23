@@ -22,29 +22,35 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * This is a wrap class of a ReentrantReadWriteLock.
  */
-public class ReadWriteLockWrapper {
+public class AutoCloseableReadWriteLockWrapper {
 
   private final ReentrantReadWriteLock lock;
   private final AutoCloseableReadLock readLock;
   private final AutoCloseableWriteLock writeLock;
 
-  public ReadWriteLockWrapper(boolean fair) {
+  public AutoCloseableReadWriteLockWrapper(boolean fair) {
     lock = new ReentrantReadWriteLock(fair);
     readLock = new AutoCloseableReadLock();
     writeLock = new AutoCloseableWriteLock();
   }
 
-  public AutoCloseableReadLock getAutoCloseableReadLock() {
+  /**
+   * Returns the lock used for reading.
+   */
+  public AutoCloseableReadLock readLock() {
     return readLock;
   }
 
-  public AutoCloseableWriteLock getAutoCloseableWriteLock() {
+  /**
+   * Returns the lock used for writing.
+   */
+  public AutoCloseableWriteLock writeLock() {
     return writeLock;
   }
 
   /**
    * This is a wrap class of a ReentrantReadWriteLock.ReadLock.
-   * Extending AutoCloseableLock interface such that the users can use a
+   * Extending AutoCloseableLock so that users can use a
    * try-with-resource syntax.
    */
   public class AutoCloseableReadLock extends AutoCloseableLock {
@@ -83,7 +89,7 @@ public class ReadWriteLockWrapper {
 
   /**
    * This is a wrap class of a ReentrantReadWriteLock.WriteLock.
-   * Extending AutoCloseableLock interface such that the users can use a
+   * Extending AutoCloseableLock so that users can use a
    * try-with-resource syntax.
    */
   public class AutoCloseableWriteLock extends AutoCloseableLock {

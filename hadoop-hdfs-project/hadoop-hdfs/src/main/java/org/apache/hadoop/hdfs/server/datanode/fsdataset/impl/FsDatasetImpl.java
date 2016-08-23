@@ -110,11 +110,11 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
-import org.apache.hadoop.util.ReadWriteLockWrapper;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Timer;
@@ -286,9 +286,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     this.conf = conf;
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
     boolean useFairLock = conf.getBoolean("dfs.datanode.dataset.lock.fair", true);
-    ReadWriteLockWrapper readWriteLock = new ReadWriteLockWrapper(useFairLock);
-    this.datasetReadLock = readWriteLock.getAutoCloseableReadLock();
-    this.datasetWriteLock = readWriteLock.getAutoCloseableWriteLock();
+    AutoCloseableReadWriteLockWrapper readWriteLock = new AutoCloseableReadWriteLockWrapper(
+      useFairLock);
+    this.datasetReadLock = readWriteLock.readLock();
+    this.datasetWriteLock = readWriteLock.writeLock();
     blockOpLocksSize = conf.getInt("dfs.datanode.dataset.lock.size", 1024);
     blockOpLocks = new Object[blockOpLocksSize];
     for (int i = 0; i < blockOpLocksSize; i++) {
