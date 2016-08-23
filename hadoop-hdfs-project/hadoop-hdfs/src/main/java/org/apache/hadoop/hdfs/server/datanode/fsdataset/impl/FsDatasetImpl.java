@@ -377,8 +377,13 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return readLock ? datasetReadLock.acquire() : datasetWriteLock.acquire();
   }
 
+  /**
+   * Gets the locks used in block operations.
+   * @param blockId the given block id.
+   * @return the lock used in the operation of the given block.
+   */
   private Object getBlockOpLock(long blockId) {
-    return blockOpLocks[(int) (Math.abs(blockId) % blockOpLocksSize)];
+    return blockOpLocks[Math.abs((int) (blockId % blockOpLocksSize))];
   }
 
   /**
