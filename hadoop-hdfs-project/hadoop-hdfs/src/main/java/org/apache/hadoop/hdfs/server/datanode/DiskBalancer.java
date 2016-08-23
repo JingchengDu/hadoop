@@ -459,7 +459,7 @@ public class DiskBalancer {
     Map<String, FsVolumeSpi> pathMap = new HashMap<>();
     FsDatasetSpi.FsVolumeReferences references;
     try {
-      try(AutoCloseableLock lock = this.dataset.acquireDatasetLock()) {
+      try(AutoCloseableLock lock = this.dataset.acquireDatasetLock(true)) {
         references = this.dataset.getFsVolumeReferences();
         for (int ndx = 0; ndx < references.size(); ndx++) {
           FsVolumeSpi vol = references.get(ndx);
