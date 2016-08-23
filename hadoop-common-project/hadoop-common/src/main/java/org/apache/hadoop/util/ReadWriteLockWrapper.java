@@ -25,9 +25,21 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ReadWriteLockWrapper {
 
   private final ReentrantReadWriteLock lock;
+  private final AutoCloseableReadLock readLock;
+  private final AutoCloseableWriteLock writeLock;
 
   public ReadWriteLockWrapper(boolean fair) {
     lock = new ReentrantReadWriteLock(fair);
+    readLock = new AutoCloseableReadLock();
+    writeLock = new AutoCloseableWriteLock();
+  }
+
+  public AutoCloseableReadLock getAutoCloseableReadLock() {
+    return readLock;
+  }
+
+  public AutoCloseableWriteLock getAutoCloseableWriteLock() {
+    return writeLock;
   }
 
   public class AutoCloseableReadLock extends AutoCloseableLock {
