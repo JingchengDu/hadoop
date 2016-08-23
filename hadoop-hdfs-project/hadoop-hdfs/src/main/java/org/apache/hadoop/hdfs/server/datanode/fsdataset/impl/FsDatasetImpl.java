@@ -272,9 +272,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   private final AutoCloseableLock datasetReadLock;
   private final AutoCloseableLock datasetWriteLock;
-  private int blockOpLocksSize = 1024;
-  private Object[] blockOpLocks;
-  
+  private final int blockOpLocksSize;
+  private final Object[] blockOpLocks;
+
   /**
    * An FSDataset has a directory where it loads its data files.
    */
