@@ -645,4 +645,9 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * Acquire the lock of the data set.
    */
   AutoCloseableLock acquireDatasetLock();
+
+  /**
+   * Acquires the read/write lock of the data set.
+   */
+  AutoCloseableLock acquireDatasetLock(boolean readLock);
 }
