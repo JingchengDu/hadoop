@@ -1423,12 +1423,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             // bump the replica's GS
             bumpReplicaGS(replicaInfo, newGS);
             // finalize the replica if RBW
+            long mend = 0;
             if (replicaInfo.getState() == ReplicaState.RBW) {
+              long dstart = System.nanoTime();
               finalizeReplica(b.getBlockPoolId(), replicaInfo);
+              mend = System.nanoTime();
+              LOG.info("===recoverClose_method===" + (mend - start) + "===wait==="
+                + (end - start) + "===disk===" + (mend- dstart));
+            } else {
+              mend = System.nanoTime();
+              LOG.info("===recoverClose_method===" + (mend - start) + "===wait==="
+                + (end - start));
             }
-            long dend = System.nanoTime();
-            LOG.info("===recoverClose_method===wait==="
-              + (end - start) + "===disk===" + (dend - end));
             return replicaInfo;
           }
         }
@@ -1516,6 +1522,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           datanode.getMetrics().incrRamDiskBlocksWriteFallback();
         }
 
+        long diskStart = System.nanoTime();
         File f;
         try {
           f = v.createRbwFile(b.getBlockPoolId(), b.getLocalBlock());
@@ -1523,14 +1530,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           IOUtils.cleanup(null, ref);
           throw e;
         }
-
+        long diskEnd = System.nanoTime();
         ReplicaBeingWritten newReplicaInfo =
             new ReplicaBeingWritten(b.getBlockId(),
             b.getGenerationStamp(), v, f.getParentFile(), b.getNumBytes());
         volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
-        long dend = System.nanoTime();
-        LOG.info("===createRbw_method===wait==="
-          + (end - start) + "===disk===" + (dend - end));
+        long mend = System.nanoTime();
+        LOG.info("===createRbw_method===" + (mend - start) + "===wait==="
+          + (end - start) + "===disk===" + (diskEnd - diskStart));
         return new ReplicaHandler(newReplicaInfo, ref);
       }
     }
@@ -1697,6 +1704,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                 volumes.getNextVolume(storageType, b.getNumBytes());
             FsVolumeImpl v = (FsVolumeImpl) ref.getVolume();
             // create a temporary file to hold block in the designated volume
+            long diskStart = System.nanoTime();
             File f;
             try {
               f = v.createTmpFile(b.getBlockPoolId(), b.getLocalBlock());
@@ -1704,13 +1712,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
               IOUtils.cleanup(null, ref);
               throw e;
             }
+            long diskEnd = System.nanoTime();
             ReplicaInPipeline newReplicaInfo =
                 new ReplicaInPipeline(b.getBlockId(), b.getGenerationStamp(), v,
                     f.getParentFile(), b.getLocalBlock().getNumBytes());
             volumeMap.add(b.getBlockPoolId(), newReplicaInfo);
-            long dend = System.nanoTime();
-            LOG.info("===createTemporary_method===wait==="
-              + (end - start) + "===disk===" + (dend - end));
+            long mend = System.nanoTime();
+            LOG.info("===createTemporary_method===" + (mend - start) + "===wait==="
+              + (end - start) + "===disk===" + (diskEnd - diskStart));
             return new ReplicaHandler(newReplicaInfo, ref);
           } else {
             if (!(currentReplicaInfo.getGenerationStamp() < b
@@ -1782,15 +1791,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         if (replicaInfo.getState() == ReplicaState.FINALIZED) {
           // this is legal, when recovery happens on a file that has
           // been opened for append but never modified
-          long dend = System.nanoTime();
-          LOG.info("===finalizeBlock_non_disk_method===wait==="
-            + (end - start) + "===disk===" + (dend - end));
+          long mend = System.nanoTime();
+          LOG.info("===finalizeBlock_non_disk_method===" + (mend - start) + "===wait==="
+            + (end - start));
           return;
         }
+        long diskStart = System.nanoTime();
         finalizeReplica(b.getBlockPoolId(), replicaInfo);
-        long dend = System.nanoTime();
-        LOG.info("===finalizeBlock_method===wait==="
-          + (end - start) + "===disk===" + (dend - end));
+        long mend = System.nanoTime();
+        LOG.info("===finalizeBlock_method======" + (mend - start) + "wait==="
+          + (end - start) + "===disk===" + (mend - diskStart));
       }
     }
   }
