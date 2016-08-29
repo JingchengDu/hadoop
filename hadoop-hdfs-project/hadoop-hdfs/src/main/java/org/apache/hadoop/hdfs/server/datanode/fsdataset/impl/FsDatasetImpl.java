@@ -190,17 +190,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public Block getStoredBlock(String bpid, long blkid)
       throws IOException {
+    File blockfile = null;
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       synchronized (getBlockOpLock(blkid)) {
-        File blockfile = getFile(bpid, blkid, false);
+        blockfile = getFile(bpid, blkid, false);
         if (blockfile == null) {
           return null;
         }
-        final File metafile = FsDatasetUtil.findMetaFile(blockfile);
-        final long gs = FsDatasetUtil.parseGenerationStamp(blockfile, metafile);
-        return new Block(blkid, blockfile.length(), gs);
       }
     }
+    final File metafile = FsDatasetUtil.findMetaFile(blockfile);
+    final long gs = FsDatasetUtil.parseGenerationStamp(blockfile, metafile);
+    return new Block(blkid, blockfile.length(), gs);
   }
 
 
@@ -369,12 +370,17 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   @Override
   public AutoCloseableLock acquireDatasetLock() {
-    return acquireDatasetLock(false);
+    return acquireDatasetWriteLock();
   }
 
   @Override
-  public AutoCloseableLock acquireDatasetLock(boolean readLock) {
-    return readLock ? datasetReadLock.acquire() : datasetWriteLock.acquire();
+  public AutoCloseableLock acquireDatasetReadLock() {
+    return datasetReadLock.acquire();
+  }
+
+  @Override
+  public AutoCloseableLock acquireDatasetWriteLock() {
+    return datasetWriteLock.acquire();
   }
 
   /**
@@ -860,25 +866,26 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public ReplicaInputStreams getTmpInputStreams(ExtendedBlock b,
       long blkOffset, long metaOffset) throws IOException {
+    ReplicaInfo info = null;
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       synchronized (getBlockOpLock(b.getBlockId())) {
-        ReplicaInfo info = getReplicaInfo(b);
-        FsVolumeReference ref = info.getVolume().obtainReference();
-        try {
-          InputStream blockInStream = openAndSeek(info.getBlockFile(), blkOffset);
-          try {
-            InputStream metaInStream =
-                openAndSeek(info.getMetaFile(), metaOffset);
-            return new ReplicaInputStreams(blockInStream, metaInStream, ref);
-          } catch (IOException e) {
-            IOUtils.cleanup(null, blockInStream);
-            throw e;
-          }
-        } catch (IOException e) {
-          IOUtils.cleanup(null, ref);
-          throw e;
-        }
+        info = getReplicaInfo(b);
       }
+    }
+    FsVolumeReference ref = info.getVolume().obtainReference();
+    try {
+      InputStream blockInStream = openAndSeek(info.getBlockFile(), blkOffset);
+      try {
+        InputStream metaInStream =
+            openAndSeek(info.getMetaFile(), metaOffset);
+        return new ReplicaInputStreams(blockInStream, metaInStream, ref);
+      } catch (IOException e) {
+        IOUtils.cleanup(null, blockInStream);
+        throw e;
+      }
+    } catch (IOException e) {
+      IOUtils.cleanup(null, ref);
+      throw e;
     }
   }
 
