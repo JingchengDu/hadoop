@@ -1751,7 +1751,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       long diskStart = System.nanoTime();
       finalizeReplica(b.getBlockPoolId(), replicaInfo);
       long mend = System.nanoTime();
-      LOG.info("===finalizeBlock_method======" + (mend - start) + "wait===" + (end - start)
+      LOG.info("===finalizeBlock_method===" + (mend - start) + "===wait===" + (end - start)
         + "===disk===" + (mend - diskStart));
     }
   }
