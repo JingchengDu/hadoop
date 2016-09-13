@@ -304,6 +304,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       blockOpLocks[i] = new Object();
     }
     this.datasetLockCondition = datasetWriteLock.newCondition();
+
     // The number of volumes required for operation is the total number
     // of volumes minus the number of failed volumes we can tolerate.
     volFailuresTolerated = datanode.getDnConf().getVolFailuresTolerated();
