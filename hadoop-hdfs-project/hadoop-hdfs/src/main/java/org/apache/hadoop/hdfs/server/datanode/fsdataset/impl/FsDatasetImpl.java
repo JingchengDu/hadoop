@@ -62,7 +62,7 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
-import org.apache.hadoop.hdfs.InstrumentedLock;
+import org.apache.hadoop.hdfs.InstrumentedAutoCloseableReadWriteLockWrapper;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
@@ -113,7 +113,6 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
-import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
@@ -292,8 +291,11 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     this.conf = conf;
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
     boolean useFairLock = conf.getBoolean("dfs.datanode.dataset.lock.fair", true);
-    AutoCloseableReadWriteLockWrapper readWriteLock = new AutoCloseableReadWriteLockWrapper(
-      useFairLock);
+    InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
+      new InstrumentedAutoCloseableReadWriteLockWrapper(
+      useFairLock, getClass().getName(), LOG, conf.getTimeDuration(
+        DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_KEY,
+        DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS), 300);
     this.datasetReadLock = readWriteLock.readLock();
     this.datasetWriteLock = readWriteLock.writeLock();
     blockOpLocksSize = conf.getInt("dfs.datanode.dataset.lock.size", 1024);

@@ -129,7 +129,7 @@ public class AutoCloseableLock implements AutoCloseable {
    *         {@code false} otherwise
    */
   @VisibleForTesting
-  boolean isLocked() {
+  protected boolean isLocked() {
     if (lock instanceof ReentrantLock) {
       return ((ReentrantLock)lock).isLocked();
     }
