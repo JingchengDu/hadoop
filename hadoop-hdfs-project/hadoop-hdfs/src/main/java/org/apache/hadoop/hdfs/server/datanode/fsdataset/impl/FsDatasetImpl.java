@@ -279,6 +279,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   private final AutoCloseableLock datasetWriteLock;
   private final int blockOpLocksSize;
   private final Object[] blockOpLocks;
+  private final Condition datasetLockCondition;
 
   /**
    * An FSDataset has a directory where it loads its data files.
@@ -300,6 +301,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     for (int i = 0; i < blockOpLocksSize; i++) {
       blockOpLocks[i] = new Object();
     }
+    this.datasetLockCondition = datasetWriteLock.newCondition();
     // The number of volumes required for operation is the total number
     // of volumes minus the number of failed volumes we can tolerate.
     volFailuresTolerated = datanode.getDnConf().getVolFailuresTolerated();
@@ -1886,13 +1888,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         new HashMap<String, BlockListAsLongs.Builder>();
 
     List<FsVolumeImpl> curVolumes = null;
-    try (AutoCloseableLock lock = datasetLock.acquire()) {
-      curVolumes = volumes.getVolumes();
-    for (FsVolumeSpi v : curVolumes) {
-      builders.put(v.getStorageID(), BlockListAsLongs.builder(maxDataLength));
-    }
-
     try (AutoCloseableLock lock = datasetWriteLock.acquire()) {
+      curVolumes = volumes.getVolumes();
+      for (FsVolumeSpi v : curVolumes) {
+        builders.put(v.getStorageID(), BlockListAsLongs.builder(maxDataLength));
+      }
+
       Set<String> missingVolumesReported = new HashSet<>();
       for (ReplicaInfo b : volumeMap.replicas(bpid)) {
         String volStorageID = b.getVolume().getStorageID();
