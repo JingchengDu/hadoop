@@ -40,6 +40,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.TimeUnit;
 
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
@@ -60,6 +62,7 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
+import org.apache.hadoop.hdfs.InstrumentedLock;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
@@ -165,7 +168,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
               volume.getCapacity(),
               volume.getDfsUsed(),
               volume.getAvailable(),
-              volume.getBlockPoolUsed(bpid));
+              volume.getBlockPoolUsed(bpid),
+              volume.getNonDfsUsed());
           reports.add(sr);
         } catch (ClosedChannelException e) {
           continue;
@@ -551,7 +555,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           // Disable the volume from the service.
           asyncDiskService.removeVolume(sd.getCurrentDir());
           volumes.removeVolume(absRoot, clearFailure);
-          volumes.waitVolumeRemoved(5000, this);
+          volumes.waitVolumeRemoved(5000, datasetLockCondition);
 
           // Removed all replica information for the blocks on the volume.
           // Unlike updating the volumeMap in addVolume(), this operation does
@@ -1881,13 +1885,25 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     Map<String, BlockListAsLongs.Builder> builders =
         new HashMap<String, BlockListAsLongs.Builder>();
 
-    List<FsVolumeImpl> curVolumes = volumes.getVolumes();
+    List<FsVolumeImpl> curVolumes = null;
+    try (AutoCloseableLock lock = datasetLock.acquire()) {
+      curVolumes = volumes.getVolumes();
     for (FsVolumeSpi v : curVolumes) {
       builders.put(v.getStorageID(), BlockListAsLongs.builder(maxDataLength));
     }
 
     try (AutoCloseableLock lock = datasetWriteLock.acquire()) {
+      Set<String> missingVolumesReported = new HashSet<>();
       for (ReplicaInfo b : volumeMap.replicas(bpid)) {
+        String volStorageID = b.getVolume().getStorageID();
+        if (!builders.containsKey(volStorageID)) {
+          if (!missingVolumesReported.contains(volStorageID)) {
+            LOG.warn("Storage volume: " + volStorageID + " missing for the"
+                + " replica block: " + b + ". Probably being removed!");
+            missingVolumesReported.add(volStorageID);
+          }
+          continue;
+        }
         switch(b.getState()) {
           case FINALIZED:
           case RBW:

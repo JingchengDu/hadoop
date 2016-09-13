@@ -42,6 +42,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.ObjectName;
@@ -405,8 +406,9 @@ public class BlockManager implements BlockStatsMXBean {
     this.blocksReplWorkMultiplier = DFSUtil.getReplWorkMultiplier(conf);
 
     this.replicationRecheckInterval = 
-      conf.getInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY, 
-                  DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_DEFAULT) * 1000L;
+      conf.getTimeDuration(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY,
+          DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_DEFAULT,
+          TimeUnit.SECONDS) * 1000L;
 
     this.storageInfoDefragmentInterval =
       conf.getLong(
@@ -2622,7 +2624,7 @@ public class BlockManager implements BlockStatsMXBean {
       } while (storageBlock != null);
     }
 
-    // Iterate any remaing blocks that have not been reported and remove them
+    // Iterate any remaining blocks that have not been reported and remove them
     while (storageBlocksIterator.hasNext()) {
       toRemove.add(storageBlocksIterator.next());
     }
@@ -2675,7 +2677,7 @@ public class BlockManager implements BlockStatsMXBean {
                 corruptReplicas.isReplicaCorrupt(storedBlock, dn))) {
       // Add replica if appropriate. If the replica was previously corrupt
       // but now okay, it might need to be updated.
-      toAdd.add(new BlockInfoToAdd(storedBlock, replica));
+      toAdd.add(new BlockInfoToAdd(storedBlock, new Block(replica)));
     }
   }
 

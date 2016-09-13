@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.FSLimitException;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
@@ -495,7 +496,8 @@ class FSDirWriteFileOp {
             replication, preferredBlockSize, storagePolicyId, ecPolicy != null);
       }
       newNode.setLocalName(localName);
-      INodesInPath iip = fsd.addINode(existing, newNode);
+      INodesInPath iip = fsd.addINode(existing, newNode,
+          permissions.getPermission());
       if (iip != null) {
         if (aclEntries != null) {
           AclStorage.updateINodeAcl(newNode, aclEntries, CURRENT_STATE_ID);
@@ -506,10 +508,13 @@ class FSDirWriteFileOp {
         return newNode;
       }
     } catch (IOException e) {
-      if(NameNode.stateChangeLog.isDebugEnabled()) {
-        NameNode.stateChangeLog.debug(
-            "DIR* FSDirectory.unprotectedAddFile: exception when add "
-                + existing.getPath() + " to the file system", e);
+      NameNode.stateChangeLog.warn(
+          "DIR* FSDirectory.unprotectedAddFile: exception when add " + existing
+              .getPath() + " to the file system", e);
+      if (e instanceof FSLimitException.MaxDirectoryItemsExceededException) {
+        NameNode.stateChangeLog.warn("Please increase "
+            + "dfs.namenode.fs-limits.max-directory-items and make it "
+            + "consistent across all NameNodes.");
       }
     }
     return null;
@@ -590,7 +595,7 @@ class FSDirWriteFileOp {
           modTime, modTime, replication, preferredBlockSize, ecPolicy != null);
       newNode.setLocalName(localName);
       newNode.toUnderConstruction(clientName, clientMachine);
-      newiip = fsd.addINode(existing, newNode);
+      newiip = fsd.addINode(existing, newNode, permissions.getPermission());
     } finally {
       fsd.writeUnlock();
     }
