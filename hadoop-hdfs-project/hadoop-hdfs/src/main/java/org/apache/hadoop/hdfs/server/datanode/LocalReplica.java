@@ -330,6 +330,7 @@ abstract public class LocalReplica extends ReplicaInfo {
 
   @Override
   public boolean renameMeta(URI destURI) throws IOException {
+    LOG.info("srcMeta***" + getMetaFile().exists() + "***" + getMetaFile().getPath());
     return renameFile(getMetaFile(), new File(destURI));
   }
 
