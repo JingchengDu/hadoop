@@ -185,20 +185,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public Block getStoredBlock(String bpid, long blkid)
       throws IOException {
-    File blockfile = null;
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       synchronized (getBlockOpLock(blkid)) {
-        blockfile = getFile(bpid, blkid, false);
-        if (blockfile == null) {
+        ReplicaInfo r = volumeMap.get(bpid, blkid);
+        if (r == null) {
           return null;
         }
+        return new Block(blkid, r.getBytesOnDisk(), r.getGenerationStamp());  
       }
     }
-    final File metafile = FsDatasetUtil.findMetaFile(blockfile);
-    final long gs = FsDatasetUtil.parseGenerationStamp(blockfile, metafile);
-    return new Block(blkid, blockfile.length(), gs);
   }
-
 
   /**
    * This should be primarily used for testing.
@@ -774,30 +770,6 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       throw new IOException("BlockId " + blockId + " is not valid.");
     }
     return r;
-  }
-  
-  /**
-   * Return the File associated with a block, without first
-   * checking that it exists. This should be used when the
-   * next operation is going to open the file for read anyway,
-   * and thus the exists check is redundant.
-   *
-   * @param touch if true then update the last access timestamp of the
-   *              block. Currently used for blocks on transient storage.
-   */
-  private File getBlockFileNoExistsCheck(ExtendedBlock b,
-                                         boolean touch)
-      throws IOException {
-    final File f;
-    try (AutoCloseableLock lock = datasetReadLock.acquire()) {
-      synchronized (getBlockOpLock(b.getBlockId())) {
-        f = getFile(b.getBlockPoolId(), b.getLocalBlock().getBlockId(), touch);
-      }
-    }
-    if (f == null) {
-      throw new IOException("Block " + b + " is not valid");
-    }
-    return f;
   }
 
   @Override // FsDatasetSpi
@@ -1652,6 +1624,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         finalizeReplica(b.getBlockPoolId(), replicaInfo);
       }
     }
+  }
 
   private ReplicaInfo finalizeReplica(String bpid,
       ReplicaInfo replicaInfo) throws IOException {
@@ -1666,8 +1639,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           throw new IOException("No volume for block " + replicaInfo);
       }
 
-        newReplicaInfo = v.addFinalizedBlock(
-            bpid, replicaInfo, replicaInfo, replicaInfo.getBytesReserved());
+      newReplicaInfo = v.addFinalizedBlock(
+          bpid, replicaInfo, replicaInfo, replicaInfo.getBytesReserved());
       if (v.isTransientStorage()) {
         releaseLockedMemory(
             replicaInfo.getOriginalBytesReserved()
@@ -1678,8 +1651,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         datanode.getMetrics().addRamDiskBytesWrite(replicaInfo.getNumBytes());
       }
     }
-      assert newReplicaInfo.getState() == ReplicaState.FINALIZED
-          : "Replica should be finalized";
+    assert newReplicaInfo.getState() == ReplicaState.FINALIZED
+        : "Replica should be finalized";
     volumeMap.add(bpid, newReplicaInfo);
     return newReplicaInfo;
   }
@@ -1900,8 +1873,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     final ReplicaInfo r;
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       synchronized (getBlockOpLock(blockId)) {
-      r = volumeMap.get(bpid, blockId);
+        r = volumeMap.get(bpid, blockId);
       }
+    }
 
     if (r != null) {
       if (r.blockDataExists()) {
@@ -2134,9 +2108,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public boolean contains(final ExtendedBlock block) {
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       final long blockId = block.getLocalBlock().getBlockId();
-      final String bpid = block.getBlockPoolId();
-      final ReplicaInfo r = volumeMap.get(bpid, blockId);
-      return (r != null && r.blockDataExists());
+      synchronized (getBlockOpLock(blockId)) {
+        final String bpid = block.getBlockPoolId();
+        final ReplicaInfo r = volumeMap.get(bpid, blockId);
+        return (r != null && r.blockDataExists());
       }
     }
   }
