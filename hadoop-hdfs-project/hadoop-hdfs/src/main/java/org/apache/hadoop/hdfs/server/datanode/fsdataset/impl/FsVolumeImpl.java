@@ -907,13 +907,18 @@ public class FsVolumeImpl implements FsVolumeSpi {
    */
   ReplicaInfo addFinalizedBlock(String bpid, Block b, ReplicaInfo replicaInfo,
       long bytesReserved) throws IOException {
-    releaseReservedSpace(bytesReserved);
-    File dest = getBlockPoolSlice(bpid).addFinalizedBlock(b, replicaInfo);
-    return new ReplicaBuilder(ReplicaState.FINALIZED)
-        .setBlock(replicaInfo)
-        .setFsVolume(this)
-        .setDirectoryToUse(dest.getParentFile())
-        .build();
+    try {
+      releaseReservedSpace(bytesReserved);
+      File dest = getBlockPoolSlice(bpid).addFinalizedBlock(b, replicaInfo);
+      return new ReplicaBuilder(ReplicaState.FINALIZED)
+          .setBlock(replicaInfo)
+          .setFsVolume(this)
+          .setDirectoryToUse(dest.getParentFile())
+          .build(); 
+    } catch(IOException e) {
+      unreference();
+      throw e;
+    }
   }
 
   Executor getCacheExecutor() {
