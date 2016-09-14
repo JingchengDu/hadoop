@@ -1275,8 +1275,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
               replica = append(b.getBlockPoolId(), replicaInfo,
                                newGS, b.getNumBytes());
               } else { //RBW
-              replicaInfo.bumpReplicaGS(newGS);
-              replica = (ReplicaInPipeline) replicaInfo;
+                replicaInfo.bumpReplicaGS(newGS);
+                replica = (ReplicaInPipeline) replicaInfo;
               }
             } catch (IOException e) {
               IOUtils.cleanup(null, ref);
