@@ -191,7 +191,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         if (r == null) {
           return null;
         }
-        return new Block(blkid, r.getBytesOnDisk(), r.getGenerationStamp());  
+        return new Block(blkid, r.getBytesOnDisk(), r.getGenerationStamp());
       }
     }
   }
@@ -2332,7 +2332,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
         // Compare generation stamp
         if (memBlockInfo.getGenerationStamp() != diskGS) {
-          File memMetaFile = FsDatasetUtil.getMetaFile(diskFile, 
+          File memMetaFile = FsDatasetUtil.getMetaFile(diskFile,
               memBlockInfo.getGenerationStamp());
           if (memMetaFile.exists()) {
             if (memMetaFile.compareTo(diskMetaFile) != 0) {
