@@ -15,26 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.ipc;
 
-import static org.junit.Assert.*;
+package org.apache.hadoop.cli.util;
 
-import org.apache.hadoop.util.ToolRunner;
-import org.junit.Test;
+import java.util.StringTokenizer;
 
+/**
+ * Comparator for the Command line tests.
+ *
+ * This comparator searches for an exact line as 'expected'
+ * in the string 'actual' and returns true if found
+ *
+ */
+public class ExactLineComparator extends ComparatorBase {
 
-public class TestRPCCallBenchmark {
+  @Override
+  public boolean compare(String actual, String expected) {
+    boolean success = false;
+    StringTokenizer tokenizer = new StringTokenizer(actual, "\n\r");
+    while (tokenizer.hasMoreTokens() && !success) {
+      String actualToken = tokenizer.nextToken();
+      success = actualToken.equals(expected);
+    }
 
-  @Test(timeout=20000)
-  public void testBenchmarkWithProto() throws Exception {
-    int rc = ToolRunner.run(new RPCCallBenchmark(),
-        new String[] {
-      "--clientThreads", "30",
-      "--serverThreads", "30",
-      "--time", "5",
-      "--serverReaderThreads", "4",
-      "--messageSize", "1024",
-      "--engine", "protobuf"});
-    assertEquals(0, rc);
+    return success;
   }
+
 }
