@@ -50,7 +50,7 @@ public class CloseableReferenceCount {
    *
    * @throws ClosedChannelException      If the status is closed.
    */
-  public synchronized void reference() throws ClosedChannelException {
+  public void reference() throws ClosedChannelException {
     int curBits = status.incrementAndGet();
     if ((curBits & STATUS_CLOSED_MASK) != 0) {
       status.decrementAndGet();
@@ -64,7 +64,7 @@ public class CloseableReferenceCount {
    * @return          True if the object is closed and has no outstanding
    *                  references.
    */
-  public synchronized boolean unreference() {
+  public boolean unreference() {
     int newVal = status.decrementAndGet();
     Preconditions.checkState(newVal != 0xffffffff,
         "called unreference when the reference count was already at 0.");
@@ -77,7 +77,7 @@ public class CloseableReferenceCount {
    *
    * @throws AsynchronousCloseException  If the status is closed.
    */
-  public synchronized void unreferenceCheckClosed() throws ClosedChannelException {
+  public void unreferenceCheckClosed() throws ClosedChannelException {
     int newVal = status.decrementAndGet();
     if ((newVal & STATUS_CLOSED_MASK) != 0) {
       throw new AsynchronousCloseException();
