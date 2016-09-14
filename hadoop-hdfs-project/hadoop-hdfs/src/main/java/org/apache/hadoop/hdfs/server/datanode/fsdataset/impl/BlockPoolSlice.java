@@ -312,8 +312,13 @@ class BlockPoolSlice {
   File addFinalizedBlock(Block b, ReplicaInfo replicaInfo) throws IOException {
     File blockDir = DatanodeUtil.idToBlockDir(finalizedDir, b.getBlockId());
     if (!blockDir.exists()) {
-      if (!blockDir.mkdirs()) {
-        throw new IOException("Failed to mkdirs " + blockDir);
+      synchronized (this) {
+        // Currently in FsDatasetImpl, the block-based lock is used.
+        // The files for different blocks might be stored in the same directory,
+        // we have to add synchronized here to synchronize the directory creation.
+        if (!blockDir.mkdirs() && !blockDir.exists()) {
+          throw new IOException("Failed to mkdirs " + blockDir);
+        }
       }
     }
     File blockFile = FsDatasetImpl.moveBlockFiles(b, replicaInfo, blockDir);
