@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
@@ -93,6 +94,11 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
     public boolean isLocked() {
       return lock.isWriteLocked();
     }
+
+    @Override
+    public Condition newCondition() {
+      return readLock.newCondition();
+    }
   }
 
   /**
@@ -131,6 +137,11 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
     @Override
     public boolean isLocked() {
       return lock.isWriteLocked();
+    }
+
+    @Override
+    public Condition newCondition() {
+      return writeLock.newCondition();
     }
   }
 }

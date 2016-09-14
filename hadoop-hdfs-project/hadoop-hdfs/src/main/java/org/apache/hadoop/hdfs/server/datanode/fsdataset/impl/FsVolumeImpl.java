@@ -280,6 +280,9 @@ public class FsVolumeImpl implements FsVolumeSpi {
             "The reference count for %s is %d, wait to be 0.",
             this, reference.getReferenceCount()));
       }
+      FsDatasetImpl.LOG.info(String.format(
+        "***The reference count for %s is %d, wait to be 0.",
+        this, reference.getReferenceCount()));
       return false;
     }
     return true;
@@ -907,18 +910,13 @@ public class FsVolumeImpl implements FsVolumeSpi {
    */
   ReplicaInfo addFinalizedBlock(String bpid, Block b, ReplicaInfo replicaInfo,
       long bytesReserved) throws IOException {
-    try {
-      releaseReservedSpace(bytesReserved);
-      File dest = getBlockPoolSlice(bpid).addFinalizedBlock(b, replicaInfo);
-      return new ReplicaBuilder(ReplicaState.FINALIZED)
-          .setBlock(replicaInfo)
-          .setFsVolume(this)
-          .setDirectoryToUse(dest.getParentFile())
-          .build(); 
-    } catch(IOException e) {
-      unreference();
-      throw e;
-    }
+    releaseReservedSpace(bytesReserved);
+    File dest = getBlockPoolSlice(bpid).addFinalizedBlock(b, replicaInfo);
+    return new ReplicaBuilder(ReplicaState.FINALIZED)
+        .setBlock(replicaInfo)
+        .setFsVolume(this)
+        .setDirectoryToUse(dest.getParentFile())
+        .build(); 
   }
 
   Executor getCacheExecutor() {
