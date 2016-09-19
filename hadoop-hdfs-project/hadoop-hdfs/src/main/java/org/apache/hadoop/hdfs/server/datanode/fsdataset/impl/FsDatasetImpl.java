@@ -1419,6 +1419,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   /**
+   * Returns the meta info of the replica.
    * This method is not thread-safe. It is expected that the caller holds
    * the locks datasetReadLock and blockOpLock.
    */
