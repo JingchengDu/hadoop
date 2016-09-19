@@ -847,7 +847,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     try {
       InputStream blockInStream = info.getDataInputStream(blkOffset);
       try {
-          InputStream metaInStream = info.getMetadataInputStream(metaOffset);
+        InputStream metaInStream = info.getMetadataInputStream(metaOffset);
         return new ReplicaInputStreams(blockInStream, metaInStream, ref);
       } catch (IOException e) {
         IOUtils.cleanup(null, blockInStream);
@@ -1144,7 +1144,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         FsVolumeReference ref = replicaInfo.getVolume().obtainReference();
         ReplicaInPipeline replica = null;
         try {
-          replica = append(b.getBlockPoolId(), replicaInfo, newGS,
+          replica = appendImpl(b.getBlockPoolId(), replicaInfo, newGS,
               b.getNumBytes());
         } catch (IOException e) {
           IOUtils.cleanup(null, ref);
@@ -1154,11 +1154,13 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
     }
   }
-  
+
   /** Append to a finalized replica
    * Change a finalized replica to be a RBW replica and 
    * bump its generation stamp to be the newGS
-   * 
+   * This method is not thread-safe. It is expected that the caller holds
+   * the locks datasetReadLock and blockOpLock.
+   *
    * @param bpid block pool Id
    * @param replicaInfo a finalized replica
    * @param newGS new generation stamp
@@ -1167,7 +1169,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    * @throws IOException if moving the replica from finalized directory 
    *         to rbw directory fails
    */
-  private ReplicaInPipeline append(String bpid,
+  private ReplicaInPipeline appendImpl(String bpid,
       ReplicaInfo replicaInfo, long newGS, long estimateBlockLen)
       throws IOException {
     // If the block is cached, start uncaching it.
@@ -1272,7 +1274,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             try {
               // change the replica's state/gs etc.
               if (replicaInfo.getState() == ReplicaState.FINALIZED) {
-              replica = append(b.getBlockPoolId(), replicaInfo,
+              replica = appendImpl(b.getBlockPoolId(), replicaInfo,
                                newGS, b.getNumBytes());
               } else { //RBW
                 replicaInfo.bumpReplicaGS(newGS);
@@ -1416,6 +1418,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
   }
 
+  /**
+   * This method is not thread-safe. It is expected that the caller holds
+   * the locks datasetReadLock and blockOpLock.
+   */
   private ReplicaHandler recoverRbwImpl(ReplicaInPipeline rbw,
       ExtendedBlock b, long newGS, long minBytesRcvd, long maxBytesRcvd)
       throws IOException {
@@ -2106,14 +2112,15 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   @Override // FsDatasetSpi
   public boolean contains(final ExtendedBlock block) {
+    ReplicaInfo r = null;
     try (AutoCloseableLock lock = datasetReadLock.acquire()) {
       final long blockId = block.getLocalBlock().getBlockId();
       synchronized (getBlockOpLock(blockId)) {
         final String bpid = block.getBlockPoolId();
-        final ReplicaInfo r = volumeMap.get(bpid, blockId);
-        return (r != null && r.blockDataExists());
+        r = volumeMap.get(bpid, blockId);
       }
     }
+    return (r != null && r.blockDataExists());
   }
 
   /**
