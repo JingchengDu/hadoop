@@ -35,8 +35,8 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
   private final InstrumentedAutoCloseableWriteLock writeLock;
 
   public InstrumentedAutoCloseableReadWriteLockWrapper(boolean fair,
-    String name, Log logger, long minLoggingGapMs,
-    long lockWarningThresholdMs) {
+      String name, Log logger, long minLoggingGapMs,
+      long lockWarningThresholdMs) {
     lock = new ReentrantReadWriteLock(fair);
     readLock = new InstrumentedAutoCloseableReadLock(new InstrumentedReadLock(
         lock, name, logger, minLoggingGapMs, lockWarningThresholdMs));

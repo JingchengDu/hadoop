@@ -3034,7 +3034,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             // Move the replica from lazyPersist/ to finalized/ on
             // the target volume
             BlockPoolSlice bpSlice =
-            replicaState.getLazyPersistVolume().getBlockPoolSlice(bpid);
+                replicaState.getLazyPersistVolume().getBlockPoolSlice(bpid);
 
             newReplicaInfo =
                 bpSlice.activateSavedReplica(replicaInfo, replicaState);
@@ -3045,7 +3045,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             // Update metrics
             datanode.getMetrics().incrRamDiskBlocksEvicted();
             datanode.getMetrics().addRamDiskBlocksEvictionWindowMs(
-            Time.monotonicNow() - replicaState.getCreationTime());
+                Time.monotonicNow() - replicaState.getCreationTime());
             if (replicaState.getNumReads() == 0) {
               datanode.getMetrics().incrRamDiskBlocksEvictedWithoutRead();
             }
