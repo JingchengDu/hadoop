@@ -63,8 +63,8 @@ public class InstrumentedWriteLock extends WriteLock {
    * Create a instrumented write lock instance which logs a warning message
    * when lock held time is above given threshold.
    */
-  protected InstrumentedWriteLock(ReentrantReadWriteLock lock, String name, Log logger,
-    long minLoggingGapMs, long lockWarningThresholdMs) {
+  protected InstrumentedWriteLock(ReentrantReadWriteLock lock, String name,
+      Log logger, long minLoggingGapMs, long lockWarningThresholdMs) {
     super(lock);
     this.name = name;
     this.clock = new Timer();
@@ -97,7 +97,8 @@ public class InstrumentedWriteLock extends WriteLock {
   }
 
   @Override
-  public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException {
+  public boolean tryLock(long timeout, TimeUnit unit)
+      throws InterruptedException {
     if (super.tryLock(timeout, unit)) {
       lockAcquireTimestamp = clock.monotonicNow();
       return true;

@@ -315,7 +315,8 @@ class BlockPoolSlice {
       synchronized (this) {
         // Currently in FsDatasetImpl, the block-based lock is used.
         // The files for different blocks might be stored in the same directory,
-        // we have to add synchronized here to synchronize the directory creation.
+        // we have to add synchronized here to synchronize the directory
+        // creation.
         if (!blockDir.mkdirs() && !blockDir.exists()) {
           throw new IOException("Failed to mkdirs " + blockDir);
         }

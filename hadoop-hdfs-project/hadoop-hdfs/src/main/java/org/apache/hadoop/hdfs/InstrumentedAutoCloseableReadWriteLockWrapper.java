@@ -34,13 +34,15 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
   private final InstrumentedAutoCloseableReadLock readLock;
   private final InstrumentedAutoCloseableWriteLock writeLock;
 
-  public InstrumentedAutoCloseableReadWriteLockWrapper(boolean fair, String name, Log logger,
-    long minLoggingGapMs, long lockWarningThresholdMs) {
+  public InstrumentedAutoCloseableReadWriteLockWrapper(boolean fair,
+    String name, Log logger, long minLoggingGapMs,
+    long lockWarningThresholdMs) {
     lock = new ReentrantReadWriteLock(fair);
-    readLock = new InstrumentedAutoCloseableReadLock(new InstrumentedReadLock(lock, name, logger,
-      minLoggingGapMs, lockWarningThresholdMs));
-    writeLock = new InstrumentedAutoCloseableWriteLock(new InstrumentedWriteLock(lock, name,
-      logger, minLoggingGapMs, lockWarningThresholdMs));
+    readLock = new InstrumentedAutoCloseableReadLock(new InstrumentedReadLock(
+        lock, name, logger, minLoggingGapMs, lockWarningThresholdMs));
+    writeLock = new InstrumentedAutoCloseableWriteLock(
+        new InstrumentedWriteLock(lock, name, logger, minLoggingGapMs,
+        lockWarningThresholdMs));
   }
 
   /**
