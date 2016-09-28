@@ -105,6 +105,7 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
@@ -307,7 +308,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
 
     storageMap = new ConcurrentHashMap<String, DatanodeStorage>();
-    volumeMap = new ReplicaMap(datasetLock);
+    volumeMap = new ReplicaMap(this);
     ramDiskReplicaTracker = RamDiskReplicaTracker.getInstance(conf, this);
 
     @SuppressWarnings("unchecked")
@@ -452,7 +453,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     FsVolumeImpl fsVolume = new FsVolumeImpl(
         this, sd.getStorageUuid(), dir, this.conf, storageType);
     FsVolumeReference ref = fsVolume.obtainReference();
-    ReplicaMap tempVolumeMap = new ReplicaMap(datasetLock);
+    ReplicaMap tempVolumeMap = new ReplicaMap(this);
     fsVolume.getVolumeMap(tempVolumeMap, ramDiskReplicaTracker);
 
     activateVolume(tempVolumeMap, sd, storageType, ref);
@@ -486,7 +487,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     StorageType storageType = location.getStorageType();
     final FsVolumeImpl fsVolume =
         createFsVolume(sd.getStorageUuid(), sd.getCurrentDir(), storageType);
-    final ReplicaMap tempVolumeMap = new ReplicaMap(new AutoCloseableLock());
+    final ReplicaMap tempVolumeMap = new ReplicaMap(fsVolume);
     ArrayList<IOException> exceptions = Lists.newArrayList();
 
     for (final NamespaceInfo nsInfo : nsInfos) {
@@ -2426,17 +2427,39 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public ReplicaRecoveryInfo initReplicaRecovery(RecoveringBlock rBlock)
       throws IOException {
-    return initReplicaRecovery(rBlock.getBlock().getBlockPoolId(), volumeMap,
-        rBlock.getBlock().getLocalBlock(), rBlock.getNewGenerationStamp(),
-        datanode.getDnConf().getXceiverStopTimeout());
+    while (true) {
+      try {
+        try (AutoCloseableLock lock = datasetReadLock.acquire()) {
+          ExtendedBlock extendblock = rBlock.getBlock();
+          synchronized (getBlockOpLock(extendblock.getBlockId())) {
+            return initReplicaRecoveryImpl(extendblock.getBlockPoolId(),
+                volumeMap, extendblock.getLocalBlock(),
+                rBlock.getNewGenerationStamp());
+          }
+        }
+      } catch (MustStopExistingWriter e) {
+        e.getReplicaInPipeline().stopWriter(
+            datanode.getDnConf().getXceiverStopTimeout());
+      }
+    }
   }
 
   /** static version of {@link #initReplicaRecovery(RecoveringBlock)}. */
   static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
-      Block block, long recoveryId, long xceiverStopTimeout) throws IOException {
+    Block block, long recoveryId, long xceiverStopTimeout) throws IOException {
+    return initReplicaRecovery(bpid, map, block, recoveryId,
+        xceiverStopTimeout, null);
+  }
+
+  static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
+      Block block, long recoveryId, long xceiverStopTimeout,
+      AutoCloseableLock autoCloseableLock) throws IOException {
+    if (autoCloseableLock == null) {
+      autoCloseableLock = createDatasetWriteLock();
+    }
     while (true) {
       try {
-        try (AutoCloseableLock lock = map.getLock().acquire()) {
+        try (AutoCloseableLock lock = autoCloseableLock.acquire()) {
           return initReplicaRecoveryImpl(bpid, map, block, recoveryId);
         }
       } catch (MustStopExistingWriter e) {
@@ -3196,6 +3219,15 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         }
       }
     }
+  }
+
+  /**
+   * Creates a instance of AutoCloseableLock.
+   */
+  private static AutoCloseableLock createDatasetWriteLock() {
+    AutoCloseableReadWriteLockWrapper readWriteLock =
+        new AutoCloseableReadWriteLockWrapper(true);
+    return readWriteLock.writeLock();
   }
 }
 
