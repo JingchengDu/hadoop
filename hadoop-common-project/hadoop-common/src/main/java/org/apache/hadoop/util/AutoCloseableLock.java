@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * This is a wrap class of a ReentrantLock. Extending AutoCloseable
+ * This is a wrap class of a Lock. Extending AutoCloseable
  * interface such that the users can use a try-with-resource syntax.
  */
 public class AutoCloseableLock implements AutoCloseable {
