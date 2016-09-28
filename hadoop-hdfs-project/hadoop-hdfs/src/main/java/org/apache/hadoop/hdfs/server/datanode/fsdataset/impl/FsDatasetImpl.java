@@ -2446,7 +2446,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   /** static version of {@link #initReplicaRecovery(RecoveringBlock)}. */
   static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
-    Block block, long recoveryId, long xceiverStopTimeout) throws IOException {
+      Block block, long recoveryId,
+      long xceiverStopTimeout) throws IOException {
     return initReplicaRecovery(bpid, map, block, recoveryId,
         xceiverStopTimeout, null);
   }
