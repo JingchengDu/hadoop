@@ -45,6 +45,7 @@ import com.google.common.annotations.VisibleForTesting;
 public class InstrumentedReadLock extends ReadLock {
 
   private static final long serialVersionUID = 1L;
+  private final ReentrantReadWriteLock lock;
   private final Log logger;
   private final String name;
   private final Timer clock;
@@ -55,9 +56,20 @@ public class InstrumentedReadLock extends ReadLock {
   private final long lockWarningThreshold;
 
   // Tracking counters for the read lock statistics.
-  private volatile long lockAcquireTimestamp;
   private final AtomicLong lastLogTimestamp;
   private final AtomicLong warningsSuppressed = new AtomicLong(0);
+
+  /**
+   * Uses the ThreadLocal to keep the time of acquiring locks since
+   * there can be multiple threads that hold the read lock concurrently.
+   */
+  private ThreadLocal<Long> readLockHeldTimeStamp =
+      new ThreadLocal<Long>() {
+    @Override
+    protected Long initialValue() {
+      return Long.MAX_VALUE;
+    };
+  };
 
   /**
    * Create a instrumented read lock instance which logs a warning message
@@ -66,6 +78,7 @@ public class InstrumentedReadLock extends ReadLock {
   protected InstrumentedReadLock(ReentrantReadWriteLock lock, String name,
       Log logger, long minLoggingGapMs, long lockWarningThresholdMs) {
     super(lock);
+    this.lock = lock;
     this.name = name;
     this.clock = new Timer();
     this.logger = logger;
@@ -78,19 +91,19 @@ public class InstrumentedReadLock extends ReadLock {
   @Override
   public void lock() {
     super.lock();
-    lockAcquireTimestamp = clock.monotonicNow();
+    recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public void lockInterruptibly() throws InterruptedException {
     super.lockInterruptibly();
-    lockAcquireTimestamp = clock.monotonicNow();
+    recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public boolean tryLock() {
     if (super.tryLock()) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
     return false;
@@ -100,7 +113,7 @@ public class InstrumentedReadLock extends ReadLock {
   public boolean tryLock(long timeout, TimeUnit unit)
       throws InterruptedException {
     if (super.tryLock(timeout, unit)) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
     return false;
@@ -108,10 +121,13 @@ public class InstrumentedReadLock extends ReadLock {
 
   @Override
   public void unlock() {
-    long localLockReleaseTime = clock.monotonicNow();
-    long localLockAcquireTime = lockAcquireTimestamp;
+    boolean needReport = lock.getReadHoldCount() == 1;
+    long lockHeldTime = clock.monotonicNow() - readLockHeldTimeStamp.get();
     super.unlock();
-    check(localLockAcquireTime, localLockReleaseTime);
+    if (needReport) {
+      readLockHeldTimeStamp.remove();
+      check(lockHeldTime);
+    }
   }
 
   @VisibleForTesting
@@ -125,19 +141,17 @@ public class InstrumentedReadLock extends ReadLock {
   }
 
   /**
-   * Log a warning if the lock was held for too long.
+   * Logs a warning if the lock was held for too long.
    *
    * Should be invoked by the caller immediately AFTER releasing the lock.
    *
-   * @param acquireTime  - timestamp just after acquiring the lock.
-   * @param releaseTime - timestamp just before releasing the lock.
+   * @param lockHeldTime how long the locks is held.
    */
-  private void check(long acquireTime, long releaseTime) {
+  private void check(long lockHeldTime) {
     if (!logger.isWarnEnabled()) {
       return;
     }
 
-    final long lockHeldTime = releaseTime - acquireTime;
     if (lockWarningThreshold - lockHeldTime < 0) {
       long now;
       long localLastLogTs;
@@ -153,6 +167,16 @@ public class InstrumentedReadLock extends ReadLock {
       } while (!lastLogTimestamp.compareAndSet(localLastLogTs, now));
       long suppressed = warningsSuppressed.getAndSet(0);
       logWarning(lockHeldTime, suppressed);
+    }
+  }
+
+  /**
+   * Records the time of acquiring the read lock to ThreadLocal.
+   * @param lockAcquireTimestamp the time of acquiring the read lock.
+   */
+  private void recordLockAcquireTimestamp(long lockAcquireTimestamp) {
+    if (lock.getReadHoldCount() == 1) {
+      readLockHeldTimeStamp.set(lockAcquireTimestamp);
     }
   }
 }
