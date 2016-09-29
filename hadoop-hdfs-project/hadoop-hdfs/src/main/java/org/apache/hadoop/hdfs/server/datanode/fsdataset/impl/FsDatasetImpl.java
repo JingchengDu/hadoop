@@ -105,7 +105,6 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
-import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
@@ -2446,18 +2445,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
   /** static version of {@link #initReplicaRecovery(RecoveringBlock)}. */
   static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
-      Block block, long recoveryId,
-      long xceiverStopTimeout) throws IOException {
-    return initReplicaRecovery(bpid, map, block, recoveryId,
-        xceiverStopTimeout, null);
-  }
-
-  static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
       Block block, long recoveryId, long xceiverStopTimeout,
       AutoCloseableLock autoCloseableLock) throws IOException {
-    if (autoCloseableLock == null) {
-      autoCloseableLock = createDatasetWriteLock();
-    }
     while (true) {
       try {
         try (AutoCloseableLock lock = autoCloseableLock.acquire()) {
@@ -3220,15 +3209,6 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         }
       }
     }
-  }
-
-  /**
-   * Creates a instance of AutoCloseableLock.
-   */
-  private static AutoCloseableLock createDatasetWriteLock() {
-    AutoCloseableReadWriteLockWrapper readWriteLock =
-        new AutoCloseableReadWriteLockWrapper(true);
-    return readWriteLock.writeLock();
   }
 }
 

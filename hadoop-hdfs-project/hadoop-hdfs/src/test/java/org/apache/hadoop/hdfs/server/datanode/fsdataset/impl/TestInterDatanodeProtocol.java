@@ -58,6 +58,8 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.util.AutoCloseableLock;
+import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -235,6 +237,7 @@ public class TestInterDatanodeProtocol {
     final long gs = 7777L;
     final long length = 22L;
     final ReplicaMap map = new ReplicaMap(this);
+    AutoCloseableLock lock = createDatasetWriteLock();
     String bpid = "BP-TEST";
     final Block[] blocks = new Block[5];
     for(int i = 0; i < blocks.length; i++) {
@@ -250,7 +253,8 @@ public class TestInterDatanodeProtocol {
       final long recoveryid = gs + 1;
       final ReplicaRecoveryInfo recoveryInfo = FsDatasetImpl
           .initReplicaRecovery(bpid, map, blocks[0], recoveryid,
-              DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+              DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+              lock);
       assertEquals(originalInfo, recoveryInfo);
 
       final ReplicaUnderRecovery updatedInfo = (ReplicaUnderRecovery)map.get(bpid, b);
@@ -261,7 +265,8 @@ public class TestInterDatanodeProtocol {
       final long recoveryid2 = gs + 2;
       final ReplicaRecoveryInfo recoveryInfo2 = FsDatasetImpl
           .initReplicaRecovery(bpid, map, blocks[0], recoveryid2,
-              DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+              DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+              lock);
       assertEquals(originalInfo, recoveryInfo2);
 
       final ReplicaUnderRecovery updatedInfo2 = (ReplicaUnderRecovery)map.get(bpid, b);
@@ -271,7 +276,8 @@ public class TestInterDatanodeProtocol {
       //case RecoveryInProgressException
       try {
         FsDatasetImpl.initReplicaRecovery(bpid, map, b, recoveryid,
-            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+            lock);
         Assert.fail();
       }
       catch(RecoveryInProgressException ripe) {
@@ -284,7 +290,8 @@ public class TestInterDatanodeProtocol {
       final Block b = new Block(firstblockid - 1, length, gs);
       ReplicaRecoveryInfo r = FsDatasetImpl.initReplicaRecovery(bpid, map, b,
           recoveryid,
-          DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+          DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+          lock);
       Assert.assertNull("Data-node should not have this replica.", r);
     }
     
@@ -293,7 +300,8 @@ public class TestInterDatanodeProtocol {
       final Block b = new Block(firstblockid + 1, length, gs);
       try {
         FsDatasetImpl.initReplicaRecovery(bpid, map, b, recoveryid,
-            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+            lock);
         Assert.fail();
       }
       catch(IOException ioe) {
@@ -307,7 +315,8 @@ public class TestInterDatanodeProtocol {
       final Block b = new Block(firstblockid, length, gs+1);
       try {
         FsDatasetImpl.initReplicaRecovery(bpid, map, b, recoveryid,
-            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT);
+            DFSConfigKeys.DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT,
+            lock);
         fail("InitReplicaRecovery should fail because replica's " +
         		"gs is less than the block's gs");
       } catch (IOException e) {
@@ -414,5 +423,14 @@ public class TestInterDatanodeProtocol {
       }
       server.stop();
     }
+  }
+
+  /**
+   * Creates a instance of AutoCloseableLock.
+   */
+  private static AutoCloseableLock createDatasetWriteLock() {
+    AutoCloseableReadWriteLockWrapper readWriteLock =
+        new AutoCloseableReadWriteLockWrapper(true);
+    return readWriteLock.writeLock();
   }
 }
