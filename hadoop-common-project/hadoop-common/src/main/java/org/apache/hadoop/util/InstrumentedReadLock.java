@@ -75,15 +75,23 @@ public class InstrumentedReadLock extends ReadLock {
    */
   protected InstrumentedReadLock(ReentrantReadWriteLock lock, String name,
       Log logger, long minLoggingGapMs, long lockWarningThresholdMs) {
+    this(lock, name, logger, minLoggingGapMs, lockWarningThresholdMs,
+        new Timer());
+  }
+
+  @VisibleForTesting
+  InstrumentedReadLock(ReentrantReadWriteLock lock, String name,
+      Log logger, long minLoggingGapMs, long lockWarningThresholdMs,
+      Timer clock) {
     super(lock);
     this.lock = lock;
     this.name = name;
-    this.clock = new Timer();
+    this.clock = clock;
     this.logger = logger;
     minLoggingGap = minLoggingGapMs;
     lockWarningThreshold = lockWarningThresholdMs;
-    lastLogTimestamp = new AtomicLong(
-      clock.monotonicNow() - Math.max(minLoggingGap, lockWarningThreshold));
+    lastLogTimestamp = new AtomicLong(clock.monotonicNow()
+        - Math.max(minLoggingGap, lockWarningThreshold));
   }
 
   @Override
