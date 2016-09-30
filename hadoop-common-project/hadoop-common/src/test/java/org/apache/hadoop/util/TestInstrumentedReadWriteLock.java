@@ -172,11 +172,13 @@ public class TestInstrumentedReadWriteLock {
     assertEquals(1, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
+    // the suppress counting is only changed when
+    // log is needed in the test
     readLock.acquire();   // t = 500
     time.set(900);
     readLock.close(); // t = 900
     assertEquals(1, wlogged.get());
-    assertEquals(1, wsuppresed.get());
+    assertEquals(0, wsuppresed.get());
 
     readLock.acquire();   // t = 900
     time.set(3000);
@@ -228,11 +230,13 @@ public class TestInstrumentedReadWriteLock {
     assertEquals(1, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
+    // the suppress counting is only changed when
+    // log is needed in the test
     writeLock.acquire();   // t = 500
     time.set(900);
     writeLock.close(); // t = 900
     assertEquals(1, wlogged.get());
-    assertEquals(1, wsuppresed.get());
+    assertEquals(0, wsuppresed.get());
 
     writeLock.acquire();   // t = 900
     time.set(3000);
