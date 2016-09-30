@@ -56,11 +56,11 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
       ReentrantReadWriteLock lock, String name, Log logger,
       long minLoggingGapMs,
       long lockWarningThresholdMs) {
+    this.lock = lock;
+    this.name = name;
+    this.logger = logger;
     this.minLoggingGapMs = minLoggingGapMs;
     this.lockWarningThresholdMs = lockWarningThresholdMs;
-    this.logger = logger;
-    this.name = name;
-    this.lock = lock;
     readLock = new InstrumentedAutoCloseableReadLock(lock);
     writeLock = new InstrumentedAutoCloseableWriteLock(lock);
   }
@@ -211,10 +211,9 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
 
     @Override
     public void release() {
-      long localLockReleaseTime = clock.monotonicNow();
-      long localLockAcquireTime = lockAcquireTimestamp;
+      long lockHeldTime = clock.monotonicNow() - lockAcquireTimestamp;
       writeLock.unlock();
-      check(clock, localLockReleaseTime - localLockAcquireTime,
+      check(clock, lockHeldTime,
           lastLogTimestamp, warningsSuppressed, false);
     }
 
