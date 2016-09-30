@@ -23,7 +23,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
@@ -38,7 +37,6 @@ import org.junit.rules.TestName;
  * A test class for InstrumentedReadLock and InstrumentedWriteLock.
  */
 public class TestInstrumentedReadWriteLock {
-
   static final Log LOG = LogFactory.getLog(TestInstrumentedReadWriteLock.class);
 
   @Rule
@@ -54,8 +52,24 @@ public class TestInstrumentedReadWriteLock {
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(true, testname, LOG,
         0,300);
-    final InstrumentedAutoCloseableWriteLock writeLock = readWriteLock
-        .writeLock();
+    final ThreadLocal<Boolean> locked = new ThreadLocal<Boolean>();
+    locked.set(Boolean.FALSE);
+    final InstrumentedAutoCloseableWriteLock writeLock =
+        readWriteLock.new InstrumentedAutoCloseableWriteLock(
+        readWriteLock.getReentrantReadWriteLock()) {
+      @Override
+      public AutoCloseableLock acquire() {
+        AutoCloseableLock lock = super.acquire();
+        locked.set(Boolean.TRUE);
+        return lock;
+      }
+
+      @Override
+      public void release() {
+        super.release();
+        locked.set(Boolean.FALSE);
+      }
+    };
     final InstrumentedAutoCloseableReadLock readLock = readWriteLock
         .readLock();
     try (AutoCloseableLock lock = writeLock.acquire()) {
@@ -76,6 +90,8 @@ public class TestInstrumentedReadWriteLock {
       competingReadThread.start();
       competingReadThread.join();
     }
+    assertFalse(locked.get());
+    locked.remove();
   }
 
   /**
@@ -129,40 +145,43 @@ public class TestInstrumentedReadWriteLock {
       }
     };
     ReentrantReadWriteLock mReadWriteLock = mock(ReentrantReadWriteLock.class);
-    Lock mlock = mock(Lock.class);
 
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
-    InstrumentedReadLock readLock = new InstrumentedReadLock(mReadWriteLock,
-        testname, LOG, 2000, 300, mclock) {
+    InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
+        new InstrumentedAutoCloseableReadWriteLockWrapper(
+        mReadWriteLock, testname, LOG, 2000, 300) {
       @Override
-      void logWarning(long lockHeldTime, long suppressed) {
+      void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
         wlogged.incrementAndGet();
         wsuppresed.set(suppressed);
       }
     };
+    InstrumentedAutoCloseableReadLock readLock =
+        readWriteLock.new InstrumentedAutoCloseableReadLock(
+        readWriteLock.getReentrantReadWriteLock(), mclock);
 
-    readLock.lock();   // t = 0
+    readLock.acquire();   // t = 0
     time.set(100);
-    readLock.unlock(); // t = 100
+    readLock.close(); // t = 100
     assertEquals(0, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
-    readLock.lock();   // t = 100
+    readLock.acquire();   // t = 100
     time.set(500);
-    readLock.unlock(); // t = 500
+    readLock.close(); // t = 500
     assertEquals(1, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
-    readLock.lock();   // t = 500
+    readLock.acquire();   // t = 500
     time.set(900);
-    readLock.unlock(); // t = 900
+    readLock.close(); // t = 900
     assertEquals(1, wlogged.get());
     assertEquals(1, wsuppresed.get());
 
-    readLock.lock();   // t = 900
+    readLock.acquire();   // t = 900
     time.set(3000);
-    readLock.unlock(); // t = 3000
+    readLock.close(); // t = 3000
     assertEquals(2, wlogged.get());
     assertEquals(1, wsuppresed.get());
   }
@@ -183,40 +202,43 @@ public class TestInstrumentedReadWriteLock {
       }
     };
     ReentrantReadWriteLock mReadWriteLock = mock(ReentrantReadWriteLock.class);
-    Lock mlock = mock(Lock.class);
 
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
-    InstrumentedWriteLock writeLock = new InstrumentedWriteLock(mReadWriteLock,
-      testname, LOG, 2000, 300, mclock) {
+    InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
+        new InstrumentedAutoCloseableReadWriteLockWrapper(
+        mReadWriteLock, testname, LOG, 2000, 300) {
       @Override
-      void logWarning(long lockHeldTime, long suppressed) {
+      void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
         wlogged.incrementAndGet();
         wsuppresed.set(suppressed);
       }
     };
+    InstrumentedAutoCloseableWriteLock writeLock =
+        readWriteLock.new InstrumentedAutoCloseableWriteLock(
+        readWriteLock.getReentrantReadWriteLock(), mclock);
 
-    writeLock.lock();   // t = 0
+    writeLock.acquire();   // t = 0
     time.set(100);
-    writeLock.unlock(); // t = 100
+    writeLock.close(); // t = 100
     assertEquals(0, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
-    writeLock.lock();   // t = 100
+    writeLock.acquire();   // t = 100
     time.set(500);
-    writeLock.unlock(); // t = 500
+    writeLock.close(); // t = 500
     assertEquals(1, wlogged.get());
     assertEquals(0, wsuppresed.get());
 
-    writeLock.lock();   // t = 500
+    writeLock.acquire();   // t = 500
     time.set(900);
-    writeLock.unlock(); // t = 900
+    writeLock.close(); // t = 900
     assertEquals(1, wlogged.get());
     assertEquals(1, wsuppresed.get());
 
-    writeLock.lock();   // t = 900
+    writeLock.acquire();   // t = 900
     time.set(3000);
-    writeLock.unlock(); // t = 3000
+    writeLock.close(); // t = 3000
     assertEquals(2, wlogged.get());
     assertEquals(1, wsuppresed.get());
   }
