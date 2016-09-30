@@ -34,9 +34,11 @@ import org.junit.Test;
 import org.junit.rules.TestName;
 
 /**
- * A test class for InstrumentedReadLock and InstrumentedWriteLock.
+ * A test class for InstrumentedAutoCloseableReadLock and
+ * InstrumentedAutoCloseableWriteLock.
  */
 public class TestInstrumentedReadWriteLock {
+
   static final Log LOG = LogFactory.getLog(TestInstrumentedReadWriteLock.class);
 
   @Rule
