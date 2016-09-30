@@ -22,7 +22,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.util.AutoCloseableLock;
 
 /**
  * This is a wrap class of a instrumented ReentrantReadWriteLock.

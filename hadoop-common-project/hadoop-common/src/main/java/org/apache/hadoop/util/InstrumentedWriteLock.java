@@ -25,8 +25,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Timer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -47,7 +45,7 @@ public class InstrumentedWriteLock extends WriteLock {
   private static final long serialVersionUID = 1L;
   private final Log logger;
   private final String name;
-  private final Timer clock;
+  private final transient Timer clock;
 
   /** Minimum gap between two lock warnings. */
   private final long minLoggingGap;

@@ -25,8 +25,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Timer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -48,7 +46,7 @@ public class InstrumentedReadLock extends ReadLock {
   private final ReentrantReadWriteLock lock;
   private final Log logger;
   private final String name;
-  private final Timer clock;
+  private final transient Timer clock;
 
   /** Minimum gap between two lock warnings. */
   private final long minLoggingGap;
@@ -63,7 +61,7 @@ public class InstrumentedReadLock extends ReadLock {
    * Uses the ThreadLocal to keep the time of acquiring locks since
    * there can be multiple threads that hold the read lock concurrently.
    */
-  private ThreadLocal<Long> readLockHeldTimeStamp =
+  private transient ThreadLocal<Long> readLockHeldTimeStamp =
       new ThreadLocal<Long>() {
     @Override
     protected Long initialValue() {
