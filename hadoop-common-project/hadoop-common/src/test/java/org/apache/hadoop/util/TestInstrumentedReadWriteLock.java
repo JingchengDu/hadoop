@@ -20,10 +20,8 @@ package org.apache.hadoop.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.mock;
 
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -146,13 +144,12 @@ public class TestInstrumentedReadWriteLock {
         return time.get();
       }
     };
-    ReentrantReadWriteLock mReadWriteLock = mock(ReentrantReadWriteLock.class);
 
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(
-        mReadWriteLock, testname, LOG, 2000, 300) {
+        true, testname, LOG, 2000, 300) {
       @Override
       void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
         wlogged.incrementAndGet();
@@ -203,13 +200,12 @@ public class TestInstrumentedReadWriteLock {
         return time.get();
       }
     };
-    ReentrantReadWriteLock mReadWriteLock = mock(ReentrantReadWriteLock.class);
 
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(
-        mReadWriteLock, testname, LOG, 2000, 300) {
+        true, testname, LOG, 2000, 300) {
       @Override
       void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
         wlogged.incrementAndGet();

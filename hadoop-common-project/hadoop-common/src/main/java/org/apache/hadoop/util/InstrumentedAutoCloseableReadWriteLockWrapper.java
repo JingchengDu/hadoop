@@ -47,16 +47,7 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
   public InstrumentedAutoCloseableReadWriteLockWrapper(boolean fair,
       String name, Log logger, long minLoggingGapMs,
       long lockWarningThresholdMs) {
-    this(new ReentrantReadWriteLock(fair), name, logger, minLoggingGapMs,
-        lockWarningThresholdMs);
-  }
-
-  @VisibleForTesting
-  public InstrumentedAutoCloseableReadWriteLockWrapper(
-      ReentrantReadWriteLock lock, String name, Log logger,
-      long minLoggingGapMs,
-      long lockWarningThresholdMs) {
-    this.lock = lock;
+    this.lock = new ReentrantReadWriteLock(fair);
     this.name = name;
     this.logger = logger;
     this.minLoggingGapMs = minLoggingGapMs;
