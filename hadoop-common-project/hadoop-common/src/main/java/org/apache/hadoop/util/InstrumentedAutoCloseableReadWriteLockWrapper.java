@@ -241,7 +241,7 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
    */
   private void check(Timer clock, long lockHeldTime,
       AtomicLong lastLogTimestamp,
-      AtomicLong warningsSuppressed, boolean readLock) {
+      AtomicLong warningsSuppressed, boolean isReadLock) {
     if (!logger.isWarnEnabled()) {
       return;
     }
@@ -260,17 +260,17 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
         }
       } while (!lastLogTimestamp.compareAndSet(localLastLogTs, now));
       long suppressed = warningsSuppressed.getAndSet(0);
-      logWarning(lockHeldTime, suppressed, readLock);
+      logWarning(lockHeldTime, suppressed, isReadLock);
     }
   }
 
   @VisibleForTesting
-  void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
+  void logWarning(long lockHeldTime, long suppressed, boolean isReadLock) {
     logger.warn(String.format("%s lock held time above threshold: " +
         "lock identifier: %s " +
         "lockHeldTimeMs=%d ms. Suppressed %d lock warnings. " +
         "The stack trace is: %s" ,
-        readLock ? "Read" : "Write", name,
+        isReadLock ? "Read" : "Write", name,
         lockHeldTime, suppressed,
         StringUtils.getStackTrace(Thread.currentThread())));
   }

@@ -43,7 +43,7 @@ public class TestInstrumentedReadWriteLock {
   public TestName name = new TestName();
 
   /**
-   * Test exclusive access of the write lock.
+   * Tests exclusive access of the write lock.
    * @throws Exception
    */
   @Test(timeout=10000)
@@ -51,25 +51,25 @@ public class TestInstrumentedReadWriteLock {
     String testname = name.getMethodName();
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(true, testname, LOG,
-        0,300);
+        0, 300);
     final ThreadLocal<Boolean> locked = new ThreadLocal<Boolean>();
     locked.set(Boolean.FALSE);
     final InstrumentedAutoCloseableWriteLock writeLock =
         readWriteLock.new InstrumentedAutoCloseableWriteLock(
         readWriteLock.getReentrantReadWriteLock()) {
-      @Override
-      public AutoCloseableLock acquire() {
-        AutoCloseableLock lock = super.acquire();
-        locked.set(Boolean.TRUE);
-        return lock;
-      }
+          @Override
+          public AutoCloseableLock acquire() {
+            AutoCloseableLock lock = super.acquire();
+            locked.set(Boolean.TRUE);
+            return lock;
+          }
 
-      @Override
-      public void release() {
-        super.release();
-        locked.set(Boolean.FALSE);
-      }
-    };
+          @Override
+          public void release() {
+            super.release();
+            locked.set(Boolean.FALSE);
+          }
+        };
     final InstrumentedAutoCloseableReadLock readLock = readWriteLock
         .readLock();
     try (AutoCloseableLock lock = writeLock.acquire()) {
@@ -95,15 +95,15 @@ public class TestInstrumentedReadWriteLock {
   }
 
   /**
-   * Test the read lock.
+   * Tests the read lock.
    * @throws Exception
    */
   @Test(timeout=10000)
-  public void InstrumentedReadLock() throws Exception {
+  public void testReadLock() throws Exception {
     String testname = name.getMethodName();
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(true, testname, LOG,
-        0,300);
+        0, 300);
     final InstrumentedAutoCloseableReadLock readLock = readWriteLock
         .readLock();
     final InstrumentedAutoCloseableWriteLock writeLock = readWriteLock
@@ -130,8 +130,7 @@ public class TestInstrumentedReadWriteLock {
   }
 
   /**
-   * Test the lock logs warning when read lock held time is greater than
-   * threshold
+   * Tests the warning when the read lock is held longer than threshold.
    * @throws Exception
    */
   @Test(timeout=10000)
@@ -150,12 +149,13 @@ public class TestInstrumentedReadWriteLock {
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(
         true, testname, LOG, 2000, 300) {
-      @Override
-      void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
-        wlogged.incrementAndGet();
-        wsuppresed.set(suppressed);
-      }
-    };
+          @Override
+          void logWarning(long lockHeldTime, long suppressed,
+              boolean readLock) {
+            wlogged.incrementAndGet();
+            wsuppresed.set(suppressed);
+          }
+        };
     InstrumentedAutoCloseableReadLock readLock =
         readWriteLock.new InstrumentedAutoCloseableReadLock(
         readWriteLock.getReentrantReadWriteLock(), mclock);
@@ -188,8 +188,7 @@ public class TestInstrumentedReadWriteLock {
   }
 
   /**
-   * Test the lock logs warning when write lock held time is greater than
-   * threshold
+   * Tests the warning when the write lock is held longer than threshold.
    * @throws Exception
    */
   @Test(timeout=10000)
@@ -208,11 +207,12 @@ public class TestInstrumentedReadWriteLock {
     InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
         new InstrumentedAutoCloseableReadWriteLockWrapper(
         true, testname, LOG, 2000, 300) {
-      @Override
-      void logWarning(long lockHeldTime, long suppressed, boolean readLock) {
-        wlogged.incrementAndGet();
-        wsuppresed.set(suppressed);
-      }
+          @Override
+          void logWarning(long lockHeldTime, long suppressed,
+              boolean readLock) {
+            wlogged.incrementAndGet();
+            wsuppresed.set(suppressed);
+          }
     };
     InstrumentedAutoCloseableWriteLock writeLock =
         readWriteLock.new InstrumentedAutoCloseableWriteLock(
