@@ -31,8 +31,8 @@ public class AutoCloseableReadWriteLockWrapper {
 
   public AutoCloseableReadWriteLockWrapper(boolean fair) {
     lock = new ReentrantReadWriteLock(fair);
-    readLock = new AutoCloseableReadLock();
-    writeLock = new AutoCloseableWriteLock();
+    readLock = new AutoCloseableReadLock(lock);
+    writeLock = new AutoCloseableWriteLock(lock);
   }
 
   /**
@@ -57,8 +57,8 @@ public class AutoCloseableReadWriteLockWrapper {
   public class AutoCloseableReadLock extends AutoCloseableLock {
     private final ReentrantReadWriteLock.ReadLock readLock;
 
-    public AutoCloseableReadLock() {
-      readLock = lock.readLock();
+    AutoCloseableReadLock(ReentrantReadWriteLock readWriteLock) {
+      readLock = readWriteLock.readLock();
     }
 
     @Override
@@ -101,8 +101,8 @@ public class AutoCloseableReadWriteLockWrapper {
   public class AutoCloseableWriteLock extends AutoCloseableLock {
     private final ReentrantReadWriteLock.WriteLock writeLock;
 
-    public AutoCloseableWriteLock() {
-      writeLock = lock.writeLock();
+    AutoCloseableWriteLock(ReentrantReadWriteLock readWriteLock) {
+      writeLock = readWriteLock.writeLock();
     }
 
     @Override

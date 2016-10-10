@@ -99,12 +99,11 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
       };
     };
 
-    public InstrumentedAutoCloseableReadLock(
+    InstrumentedAutoCloseableReadLock(
         ReentrantReadWriteLock readWriteLock) {
       this(readWriteLock, new Timer());
     }
 
-    @VisibleForTesting
     InstrumentedAutoCloseableReadLock(
         ReentrantReadWriteLock readWriteLock, Timer clock) {
       this.readLock = readWriteLock.readLock();
@@ -179,12 +178,11 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
     private final AtomicLong warningsSuppressed = new AtomicLong(0);
     private final WriteLock writeLock;
 
-    public InstrumentedAutoCloseableWriteLock(
+    InstrumentedAutoCloseableWriteLock(
         ReentrantReadWriteLock readWriteLock) {
       this(readWriteLock, new Timer());
     }
 
-    @VisibleForTesting
     InstrumentedAutoCloseableWriteLock(ReentrantReadWriteLock readWriteLock,
         Timer clock) {
       this.writeLock = readWriteLock.writeLock();
@@ -246,7 +244,7 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
       return;
     }
 
-    if (lockWarningThresholdMs - lockHeldTime < 0) {
+    if (lockWarningThresholdMs < lockHeldTime) {
       long now;
       long localLastLogTs;
       do {
@@ -254,7 +252,7 @@ public class InstrumentedAutoCloseableReadWriteLockWrapper {
         localLastLogTs = lastLogTimestamp.get();
         long deltaSinceLastLog = now - localLastLogTs;
         // check should print log or not
-        if (deltaSinceLastLog - minLoggingGapMs < 0) {
+        if (deltaSinceLastLog < minLoggingGapMs) {
           warningsSuppressed.incrementAndGet();
           return;
         }
