@@ -35,7 +35,6 @@ public class InstrumentedWriteLock extends WriteLock {
 
   private static final long serialVersionUID = 1L;
 
-  private WriteLock writeLock;
   private final String name;
   private transient Log logger =
       LogFactory.getLog(InstrumentedReadLock.class);
@@ -68,24 +67,23 @@ public class InstrumentedWriteLock extends WriteLock {
     lockWarningThreshold = lockWarningThresholdMs;
     lastLogTimestamp = new AtomicLong(
         clock.monotonicNow() - Math.max(minLoggingGap, lockWarningThreshold));
-    this.writeLock = readWriteLock.writeLock();
   }
 
   @Override
   public void lock() {
-    writeLock.lock();
+    super.lock();
     lockAcquireTimestamp = clock.monotonicNow();
   }
 
   @Override
   public void lockInterruptibly() throws InterruptedException {
-    writeLock.lockInterruptibly();
+    super.lockInterruptibly();
     lockAcquireTimestamp = clock.monotonicNow();
   }
 
   @Override
   public boolean tryLock() {
-    if (writeLock.tryLock()) {
+    if (super.tryLock()) {
       lockAcquireTimestamp = clock.monotonicNow();
       return true;
     }
@@ -94,7 +92,7 @@ public class InstrumentedWriteLock extends WriteLock {
 
   @Override
   public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
-    if (writeLock.tryLock(time, unit)) {
+    if (super.tryLock(time, unit)) {
       lockAcquireTimestamp = clock.monotonicNow();
       return true;
     }
@@ -105,7 +103,7 @@ public class InstrumentedWriteLock extends WriteLock {
   public void unlock() {
     long localLockReleaseTime = clock.monotonicNow();
     long localLockAcquireTime = lockAcquireTimestamp;
-    writeLock.unlock();
+    super.unlock();
     check(localLockAcquireTime, localLockReleaseTime);
   }
 

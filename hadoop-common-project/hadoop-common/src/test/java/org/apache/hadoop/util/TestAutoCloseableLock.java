@@ -21,6 +21,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 import org.junit.Test;
 /**
  * A test class for AutoCloseableLock.
@@ -91,5 +93,85 @@ public class TestAutoCloseableLock {
       assertTrue(localLock.isLocked());
     }
     assertFalse(lock.isLocked());
+  }
+
+  /**
+   * Tests exclusive access of the write lock.
+   * @throws Exception
+   */
+  @Test(timeout=10000)
+  public void testWriteLock() throws Exception {
+    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
+    final ThreadLocal<Boolean> locked = new ThreadLocal<Boolean>();
+    locked.set(Boolean.FALSE);
+    final AutoCloseableLock writeLock = new AutoCloseableLock(
+        readWriteLock.writeLock()) {
+      @Override
+      public AutoCloseableLock acquire() {
+        AutoCloseableLock lock = super.acquire();
+        locked.set(Boolean.TRUE);
+        return lock;
+      }
+
+      @Override
+      public void release() {
+        super.release();
+        locked.set(Boolean.FALSE);
+      }
+    };
+    final AutoCloseableLock readLock = new AutoCloseableLock(
+        readWriteLock.readLock());
+    try (AutoCloseableLock lock = writeLock.acquire()) {
+      Thread competingWriteThread = new Thread() {
+        @Override
+        public void run() {
+          assertFalse(writeLock.tryLock());
+        }
+      };
+      competingWriteThread.start();
+      competingWriteThread.join();
+      Thread competingReadThread = new Thread() {
+        @Override
+        public void run() {
+          assertFalse(readLock.tryLock());
+        };
+      };
+      competingReadThread.start();
+      competingReadThread.join();
+    }
+    assertFalse(locked.get());
+    locked.remove();
+  }
+
+  /**
+   * Tests the read lock.
+   * @throws Exception
+   */
+  @Test(timeout=10000)
+  public void testReadLock() throws Exception {
+    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
+    final AutoCloseableLock readLock = new AutoCloseableLock(
+        readWriteLock.readLock());
+    final AutoCloseableLock writeLock = new AutoCloseableLock(
+        readWriteLock.writeLock());
+    try (AutoCloseableLock lock = readLock.acquire()) {
+      Thread competingReadThread = new Thread() {
+        @Override
+        public void run() {
+          assertTrue(readLock.tryLock());
+          readLock.release();
+        }
+      };
+      competingReadThread.start();
+      competingReadThread.join();
+      Thread competingWriteThread = new Thread() {
+        @Override
+        public void run() {
+          assertFalse(writeLock.tryLock());
+        }
+      };
+      competingWriteThread.start();
+      competingWriteThread.join();
+    }
   }
 }

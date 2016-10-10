@@ -36,7 +36,6 @@ public class InstrumentedReadLock extends ReadLock {
   private static final long serialVersionUID = 1L;
 
   private ReentrantReadWriteLock readWriteLock;
-  private ReadLock readLock;
   private final String name;
   private transient Log logger =
       LogFactory.getLog(InstrumentedReadLock.class);
@@ -81,24 +80,23 @@ public class InstrumentedReadLock extends ReadLock {
     lastLogTimestamp = new AtomicLong(
         clock.monotonicNow() - Math.max(minLoggingGap, lockWarningThreshold));
     this.readWriteLock = readWriteLock;
-    this.readLock = readWriteLock.readLock();
   }
 
   @Override
   public void lock() {
-    readLock.lock();
+    super.lock();
     recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public void lockInterruptibly() throws InterruptedException {
-    readLock.lockInterruptibly();
+    super.lockInterruptibly();
     recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public boolean tryLock() {
-    if (readLock.tryLock()) {
+    if (super.tryLock()) {
       recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
@@ -107,7 +105,7 @@ public class InstrumentedReadLock extends ReadLock {
 
   @Override
   public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
-    if (readLock.tryLock(time, unit)) {
+    if (super.tryLock(time, unit)) {
       recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
@@ -119,7 +117,7 @@ public class InstrumentedReadLock extends ReadLock {
     boolean needReport = readWriteLock.getReadHoldCount() == 1;
     long localLockReleaseTime = clock.monotonicNow();
     long localLockAcquireTime = readLockHeldTimeStamp.get();
-    readLock.unlock();
+    super.unlock();
     if (needReport) {
       readLockHeldTimeStamp.remove();
       check(localLockAcquireTime, localLockReleaseTime);

@@ -29,12 +29,11 @@ public class InstrumentedReadWriteLock extends ReentrantReadWriteLock{
   private InstrumentedWriteLock writeLock;
 
   InstrumentedReadWriteLock(boolean fair, String name,
-      ReentrantReadWriteLock readWriteLock,
       long minLoggingGapMs, long lockWarningThresholdMs) {
     super(fair);
-    readLock = new InstrumentedReadLock(name, readWriteLock,
+    readLock = new InstrumentedReadLock(name, this,
         minLoggingGapMs, lockWarningThresholdMs);
-    writeLock = new InstrumentedWriteLock(name, readWriteLock,
+    writeLock = new InstrumentedWriteLock(name, this,
         minLoggingGapMs, lockWarningThresholdMs);
   }
 
