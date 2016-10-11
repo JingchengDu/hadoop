@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.util;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -24,8 +24,6 @@ import static org.junit.Assert.assertTrue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.apache.hadoop.util.AutoCloseableLock;
-import org.apache.hadoop.util.Timer;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;

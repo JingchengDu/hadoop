@@ -15,26 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.util;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Timer;
 
 /**
- * This is a wrap class of a WriteLock.
+ * This is a wrap class of a ReadLock.
  */
-public class InstrumentedWriteLock extends WriteLock {
+public class InstrumentedReadLock extends ReadLock {
 
   private static final long serialVersionUID = 1L;
 
+  private ReentrantReadWriteLock readWriteLock;
   private final String name;
   private transient Log logger =
       LogFactory.getLog(InstrumentedReadLock.class);
@@ -46,18 +45,29 @@ public class InstrumentedWriteLock extends WriteLock {
   private final long lockWarningThreshold;
 
   // Tracking counters for lock statistics.
-  private volatile long lockAcquireTimestamp;
   private final AtomicLong lastLogTimestamp;
   private final AtomicLong warningsSuppressed = new AtomicLong(0);
 
-  public InstrumentedWriteLock(String name,
+  /**
+   * Uses the ThreadLocal to keep the time of acquiring locks since
+   * there can be multiple threads that hold the read lock concurrently.
+   */
+  private transient ThreadLocal<Long> readLockHeldTimeStamp =
+      new ThreadLocal<Long>() {
+    @Override
+    protected Long initialValue() {
+      return Long.MAX_VALUE;
+    };
+  };
+
+  public InstrumentedReadLock(String name,
       ReentrantReadWriteLock readWriteLock,
       long minLoggingGapMs, long lockWarningThresholdMs) {
     this(name, readWriteLock, minLoggingGapMs, lockWarningThresholdMs,
         new Timer());
   }
 
-  public InstrumentedWriteLock(String name,
+  public InstrumentedReadLock(String name,
       ReentrantReadWriteLock readWriteLock,
       long minLoggingGapMs, long lockWarningThresholdMs, Timer clock) {
     super(readWriteLock);
@@ -67,24 +77,25 @@ public class InstrumentedWriteLock extends WriteLock {
     lockWarningThreshold = lockWarningThresholdMs;
     lastLogTimestamp = new AtomicLong(
         clock.monotonicNow() - Math.max(minLoggingGap, lockWarningThreshold));
+    this.readWriteLock = readWriteLock;
   }
 
   @Override
   public void lock() {
     super.lock();
-    lockAcquireTimestamp = clock.monotonicNow();
+    recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public void lockInterruptibly() throws InterruptedException {
     super.lockInterruptibly();
-    lockAcquireTimestamp = clock.monotonicNow();
+    recordLockAcquireTimestamp(clock.monotonicNow());
   }
 
   @Override
   public boolean tryLock() {
     if (super.tryLock()) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
     return false;
@@ -93,7 +104,7 @@ public class InstrumentedWriteLock extends WriteLock {
   @Override
   public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
     if (super.tryLock(time, unit)) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      recordLockAcquireTimestamp(clock.monotonicNow());
       return true;
     }
     return false;
@@ -101,10 +112,24 @@ public class InstrumentedWriteLock extends WriteLock {
 
   @Override
   public void unlock() {
+    boolean needReport = readWriteLock.getReadHoldCount() == 1;
     long localLockReleaseTime = clock.monotonicNow();
-    long localLockAcquireTime = lockAcquireTimestamp;
+    long localLockAcquireTime = readLockHeldTimeStamp.get();
     super.unlock();
-    check(localLockAcquireTime, localLockReleaseTime);
+    if (needReport) {
+      readLockHeldTimeStamp.remove();
+      check(localLockAcquireTime, localLockReleaseTime);
+    }
+  }
+
+  /**
+   * Records the time of acquiring the read lock to ThreadLocal.
+   * @param lockAcquireTimestamp the time of acquiring the read lock.
+   */
+  private void recordLockAcquireTimestamp(long lockAcquireTimestamp) {
+    if (readWriteLock.getReadHoldCount() == 1) {
+      readLockHeldTimeStamp.set(lockAcquireTimestamp);
+    }
   }
 
   /**
@@ -114,7 +139,13 @@ public class InstrumentedWriteLock extends WriteLock {
   private void readObject(java.io.ObjectInputStream s)
       throws ClassNotFoundException, IOException {
     s.defaultReadObject();
-    // reset the logger and timer.
+    // reset the thread local, logger and timer.
+    readLockHeldTimeStamp = new ThreadLocal<Long>() {
+      @Override
+      protected Long initialValue() {
+        return Long.MAX_VALUE;
+      }
+    };
     logger = LogFactory.getLog(InstrumentedReadLock.class);
     clock = new Timer();
   }
@@ -150,7 +181,7 @@ public class InstrumentedWriteLock extends WriteLock {
   }
 
   protected void logWarning(long lockHeldTime, long suppressed) {
-    logger.warn(String.format("Write lock held time above threshold: " +
+    logger.warn(String.format("Read lock held time above threshold: " +
         "lock identifier: %s " +
         "lockHeldTimeMs=%d ms. Suppressed %d lock warnings. " +
         "The stack trace is: %s" ,
