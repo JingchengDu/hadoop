@@ -20,10 +20,14 @@ package org.apache.hadoop.util;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
 
 /**
  * This is a wrap class of a WriteLock.
  */
+@InterfaceAudience.Private
+@InterfaceStability.Unstable
 public class InstrumentedWriteLock extends InstrumentedLock {
 
   public InstrumentedWriteLock(String name, Log logger,

@@ -21,9 +21,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 
-import org.apache.hadoop.util.AutoCloseableLock;
-import org.apache.hadoop.util.InstrumentedLock;
-import org.apache.hadoop.util.Timer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.junit.Rule;

@@ -43,20 +43,20 @@ import com.google.common.annotations.VisibleForTesting;
 @InterfaceStability.Unstable
 public class InstrumentedLock implements Lock {
 
-  protected final Lock lock;
-  protected final Log logger;
-  protected final String name;
-  protected final Timer clock;
+  final Lock lock;
+  private final Log logger;
+  private final String name;
+  final Timer clock;
 
   /** Minimum gap between two lock warnings. */
-  protected final long minLoggingGap;
+  private final long minLoggingGap;
   /** Threshold for detecting long lock held time. */
-  protected final long lockWarningThreshold;
+  private final long lockWarningThreshold;
 
   // Tracking counters for lock statistics.
-  protected volatile long lockAcquireTimestamp;
-  protected final AtomicLong lastLogTimestamp;
-  protected final AtomicLong warningsSuppressed = new AtomicLong(0);
+  private volatile long lockAcquireTimestamp;
+  private final AtomicLong lastLogTimestamp;
+  private final AtomicLong warningsSuppressed = new AtomicLong(0);
 
   /**
    * Create a instrumented lock instance which logs a warning message

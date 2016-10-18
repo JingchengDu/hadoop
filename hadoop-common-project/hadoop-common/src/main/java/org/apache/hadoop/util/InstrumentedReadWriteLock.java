@@ -22,10 +22,14 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
 
 /**
  * This is a wrap class of a ReentrantReadWriteLock.
  */
+@InterfaceAudience.Private
+@InterfaceStability.Unstable
 public class InstrumentedReadWriteLock implements ReadWriteLock {
 
   private Lock readLock;

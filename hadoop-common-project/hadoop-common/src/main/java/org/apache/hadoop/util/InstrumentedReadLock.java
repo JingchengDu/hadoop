@@ -21,10 +21,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
 
 /**
  * This is a wrap class of a ReadLock.
  */
+@InterfaceAudience.Private
+@InterfaceStability.Unstable
 public class InstrumentedReadLock extends InstrumentedLock {
 
   private ReentrantReadWriteLock readWriteLock;
