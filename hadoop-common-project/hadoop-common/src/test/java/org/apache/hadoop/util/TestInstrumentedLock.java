@@ -29,7 +29,6 @@ import org.apache.commons.logging.LogFactory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-
 import static org.mockito.Mockito.*;
 import static org.junit.Assert.*;
 
