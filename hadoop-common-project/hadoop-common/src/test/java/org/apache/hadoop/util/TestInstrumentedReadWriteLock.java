@@ -24,6 +24,8 @@ import static org.junit.Assert.assertTrue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -32,6 +34,8 @@ import org.junit.rules.TestName;
  * A test class for InstrumentedReadLock and InstrumentedWriteLock.
  */
 public class TestInstrumentedReadWriteLock {
+
+  static final Log LOG = LogFactory.getLog(TestInstrumentedReadWriteLock.class);
 
   @Rule
   public TestName name = new TestName();
@@ -46,7 +50,7 @@ public class TestInstrumentedReadWriteLock {
     final ThreadLocal<Boolean> locked = new ThreadLocal<Boolean>();
     locked.set(Boolean.FALSE);
     InstrumentedReadWriteLock readWriteLock = new InstrumentedReadWriteLock(
-        true, testname, 2000, 300);
+        true, testname, LOG, 2000, 300);
     final AutoCloseableLock writeLock = new AutoCloseableLock(
         readWriteLock.writeLock()) {
       @Override
@@ -94,7 +98,7 @@ public class TestInstrumentedReadWriteLock {
   public void testReadLock() throws Exception {
     String testname = name.getMethodName();
     InstrumentedReadWriteLock readWriteLock = new InstrumentedReadWriteLock(
-        true, testname, 2000, 300);
+        true, testname, LOG, 2000, 300);
     final AutoCloseableLock readLock = new AutoCloseableLock(
         readWriteLock.readLock());
     final AutoCloseableLock writeLock = new AutoCloseableLock(
@@ -138,9 +142,8 @@ public class TestInstrumentedReadWriteLock {
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
     ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
-    InstrumentedReadLock readLock = new InstrumentedReadLock(testname,
+    InstrumentedReadLock readLock = new InstrumentedReadLock(testname, LOG,
         readWriteLock, 2000, 300, mclock) {
-      private static final long serialVersionUID = 1L;
       @Override
       protected void logWarning(long lockHeldTime, long suppressed) {
         wlogged.incrementAndGet();
@@ -193,9 +196,8 @@ public class TestInstrumentedReadWriteLock {
     final AtomicLong wlogged = new AtomicLong(0);
     final AtomicLong wsuppresed = new AtomicLong(0);
     ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
-    InstrumentedWriteLock writeLock = new InstrumentedWriteLock(testname,
+    InstrumentedWriteLock writeLock = new InstrumentedWriteLock(testname, LOG,
         readWriteLock, 2000, 300, mclock) {
-      private static final long serialVersionUID = 1L;
       @Override
       protected void logWarning(long lockHeldTime, long suppressed) {
         wlogged.incrementAndGet();

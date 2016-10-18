@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.util;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -26,8 +26,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.commons.logging.Log;
-import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Timer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -45,20 +43,20 @@ import com.google.common.annotations.VisibleForTesting;
 @InterfaceStability.Unstable
 public class InstrumentedLock implements Lock {
 
-  private final Lock lock;
-  private final Log logger;
-  private final String name;
-  private final Timer clock;
+  protected final Lock lock;
+  protected final Log logger;
+  protected final String name;
+  protected final Timer clock;
 
   /** Minimum gap between two lock warnings. */
-  private final long minLoggingGap;
+  protected final long minLoggingGap;
   /** Threshold for detecting long lock held time. */
-  private final long lockWarningThreshold;
+  protected final long lockWarningThreshold;
 
   // Tracking counters for lock statistics.
-  private volatile long lockAcquireTimestamp;
-  private final AtomicLong lastLogTimestamp;
-  private final AtomicLong warningsSuppressed = new AtomicLong(0);
+  protected volatile long lockAcquireTimestamp;
+  protected final AtomicLong lastLogTimestamp;
+  protected final AtomicLong warningsSuppressed = new AtomicLong(0);
 
   /**
    * Create a instrumented lock instance which logs a warning message
@@ -158,7 +156,7 @@ public class InstrumentedLock implements Lock {
    * @param acquireTime  - timestamp just after acquiring the lock.
    * @param releaseTime - timestamp just before releasing the lock.
    */
-  private void check(long acquireTime, long releaseTime) {
+  protected void check(long acquireTime, long releaseTime) {
     if (!logger.isWarnEnabled()) {
       return;
     }

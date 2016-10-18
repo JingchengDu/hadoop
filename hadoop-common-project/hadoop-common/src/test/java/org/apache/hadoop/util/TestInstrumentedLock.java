@@ -15,21 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.util;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 
 import org.apache.hadoop.util.AutoCloseableLock;
+import org.apache.hadoop.util.InstrumentedLock;
 import org.apache.hadoop.util.Timer;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
+
 import static org.mockito.Mockito.*;
 import static org.junit.Assert.*;
 

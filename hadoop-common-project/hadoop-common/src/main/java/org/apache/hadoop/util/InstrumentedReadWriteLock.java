@@ -17,33 +17,36 @@
  */
 package org.apache.hadoop.util;
 
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import org.apache.commons.logging.Log;
 
 /**
  * This is a wrap class of a ReentrantReadWriteLock.
  */
-public class InstrumentedReadWriteLock extends ReentrantReadWriteLock{
+public class InstrumentedReadWriteLock implements ReadWriteLock {
 
-  private static final long serialVersionUID = 1L;
-  private InstrumentedReadLock readLock;
-  private InstrumentedWriteLock writeLock;
+  private Lock readLock;
+  private Lock writeLock;
 
-  InstrumentedReadWriteLock(boolean fair, String name,
+  InstrumentedReadWriteLock(boolean fair, String name, Log logger,
       long minLoggingGapMs, long lockWarningThresholdMs) {
-    super(fair);
-    readLock = new InstrumentedReadLock(name, this,
+    ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(fair);
+    readLock = new InstrumentedReadLock(name, logger, readWriteLock,
         minLoggingGapMs, lockWarningThresholdMs);
-    writeLock = new InstrumentedWriteLock(name, this,
+    writeLock = new InstrumentedWriteLock(name, logger, readWriteLock,
         minLoggingGapMs, lockWarningThresholdMs);
   }
 
   @Override
-  public ReadLock readLock() {
+  public Lock readLock() {
     return readLock;
   }
 
   @Override
-  public WriteLock writeLock() {
+  public Lock writeLock() {
     return writeLock;
   }
 }
