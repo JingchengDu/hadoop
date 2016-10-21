@@ -17,27 +17,34 @@
  */
 package org.apache.hadoop.util;
 
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
- * This is a wrap class of a ReadLock.
+ * This is a wrap class of a {@link ReadLock}.
+ * It extends the class {@link InstrumentedLock}, and can be used to track
+ * whether a specific read lock is being held for too long and log
+ * warnings if so.
+ *
+ * The logged warnings are throttled so that logs are not spammed.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public class InstrumentedReadLock extends InstrumentedLock {
 
-  private ReentrantReadWriteLock readWriteLock;
+  private final ReentrantReadWriteLock readWriteLock;
 
   /**
    * Uses the ThreadLocal to keep the time of acquiring locks since
    * there can be multiple threads that hold the read lock concurrently.
    */
-  private transient ThreadLocal<Long> readLockHeldTimeStamp =
+  private final ThreadLocal<Long> readLockHeldTimeStamp =
       new ThreadLocal<Long>() {
     @Override
     protected Long initialValue() {
@@ -52,42 +59,13 @@ public class InstrumentedReadLock extends InstrumentedLock {
         new Timer());
   }
 
-  public InstrumentedReadLock(String name, Log logger,
+  @VisibleForTesting
+  InstrumentedReadLock(String name, Log logger,
       ReentrantReadWriteLock readWriteLock,
       long minLoggingGapMs, long lockWarningThresholdMs, Timer clock) {
     super(name, logger, readWriteLock.readLock(), minLoggingGapMs,
         lockWarningThresholdMs, clock);
     this.readWriteLock = readWriteLock;
-  }
-
-  @Override
-  public void lock() {
-    lock.lock();
-    recordLockAcquireTimestamp(clock.monotonicNow());
-  }
-
-  @Override
-  public void lockInterruptibly() throws InterruptedException {
-    lock.lockInterruptibly();
-    recordLockAcquireTimestamp(clock.monotonicNow());
-  }
-
-  @Override
-  public boolean tryLock() {
-    if (lock.tryLock()) {
-      recordLockAcquireTimestamp(clock.monotonicNow());
-      return true;
-    }
-    return false;
-  }
-
-  @Override
-  public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
-    if (lock.tryLock(time, unit)) {
-      recordLockAcquireTimestamp(clock.monotonicNow());
-      return true;
-    }
-    return false;
   }
 
   @Override
@@ -103,12 +81,13 @@ public class InstrumentedReadLock extends InstrumentedLock {
   }
 
   /**
-   * Records the time of acquiring the read lock to ThreadLocal.
-   * @param lockAcquireTimestamp the time of acquiring the read lock.
+   * Starts timing for the instrumented read lock.
+   * It records the time to ThreadLocal.
    */
-  private void recordLockAcquireTimestamp(long lockAcquireTimestamp) {
+  @Override
+  protected void startLockTiming() {
     if (readWriteLock.getReadHoldCount() == 1) {
-      readLockHeldTimeStamp.set(lockAcquireTimestamp);
+      readLockHeldTimeStamp.set(clock.monotonicNow());
     }
   }
 }

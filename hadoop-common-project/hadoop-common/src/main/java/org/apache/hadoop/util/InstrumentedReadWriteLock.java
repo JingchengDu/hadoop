@@ -20,20 +20,24 @@ package org.apache.hadoop.util;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 /**
- * This is a wrap class of a ReentrantReadWriteLock.
+ * This is a wrap class of a {@link ReentrantReadWriteLock}.
+ * It implements the interface {@link ReadWriteLock}, and can be used to
+ * create instrumented {@link ReadLock} and {@link WriteLock}.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public class InstrumentedReadWriteLock implements ReadWriteLock {
 
-  private Lock readLock;
-  private Lock writeLock;
+  private final Lock readLock;
+  private final Lock writeLock;
 
   InstrumentedReadWriteLock(boolean fair, String name, Log logger,
       long minLoggingGapMs, long lockWarningThresholdMs) {

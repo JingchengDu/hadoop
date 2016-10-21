@@ -31,7 +31,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 /**
  * This is a debugging class that can be used by callers to track
- * whether a specifc lock is being held for too long and periodically
+ * whether a specific lock is being held for too long and periodically
  * log a warning and stack trace, if so.
  *
  * The logged warnings are throttled so that logs are not spammed.
@@ -98,19 +98,19 @@ public class InstrumentedLock implements Lock {
   @Override
   public void lock() {
     lock.lock();
-    lockAcquireTimestamp = clock.monotonicNow();
+    startLockTiming();
   }
 
   @Override
   public void lockInterruptibly() throws InterruptedException {
     lock.lockInterruptibly();
-    lockAcquireTimestamp = clock.monotonicNow();
+    startLockTiming();
   }
 
   @Override
   public boolean tryLock() {
     if (lock.tryLock()) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      startLockTiming();
       return true;
     }
     return false;
@@ -119,7 +119,7 @@ public class InstrumentedLock implements Lock {
   @Override
   public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
     if (lock.tryLock(time, unit)) {
-      lockAcquireTimestamp = clock.monotonicNow();
+      startLockTiming();
       return true;
     }
     return false;
@@ -146,6 +146,13 @@ public class InstrumentedLock implements Lock {
         "The stack trace is: %s" ,
         name, lockHeldTime, suppressed,
         StringUtils.getStackTrace(Thread.currentThread())));
+  }
+
+  /**
+   * Starts timing for the instrumented lock.
+   */
+  protected void startLockTiming() {
+    lockAcquireTimestamp = clock.monotonicNow();
   }
 
   /**
