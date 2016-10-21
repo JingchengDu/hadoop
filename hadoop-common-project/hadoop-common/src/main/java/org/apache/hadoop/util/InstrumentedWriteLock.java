@@ -18,7 +18,6 @@
 package org.apache.hadoop.util;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -27,7 +26,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * This is a wrap class of a {@link WriteLock}.
+ * This is a wrap class of a <tt>WriteLock</tt>.
  * It extends the class {@link InstrumentedLock}, and can be used to track
  * whether a specific write lock is being held for too long and log
  * warnings if so.

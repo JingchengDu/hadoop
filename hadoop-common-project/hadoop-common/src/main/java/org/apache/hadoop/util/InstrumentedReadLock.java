@@ -18,7 +18,6 @@
 package org.apache.hadoop.util;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -27,7 +26,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * This is a wrap class of a {@link ReadLock}.
+ * This is a wrap class of a <tt>ReadLock</tt>.
  * It extends the class {@link InstrumentedLock}, and can be used to track
  * whether a specific read lock is being held for too long and log
  * warnings if so.
@@ -71,9 +70,9 @@ public class InstrumentedReadLock extends InstrumentedLock {
   @Override
   public void unlock() {
     boolean needReport = readWriteLock.getReadHoldCount() == 1;
-    long localLockReleaseTime = clock.monotonicNow();
+    long localLockReleaseTime = getTimer().monotonicNow();
     long localLockAcquireTime = readLockHeldTimeStamp.get();
-    lock.unlock();
+    getLock().unlock();
     if (needReport) {
       readLockHeldTimeStamp.remove();
       check(localLockAcquireTime, localLockReleaseTime);
@@ -87,7 +86,7 @@ public class InstrumentedReadLock extends InstrumentedLock {
   @Override
   protected void startLockTiming() {
     if (readWriteLock.getReadHoldCount() == 1) {
-      readLockHeldTimeStamp.set(clock.monotonicNow());
+      readLockHeldTimeStamp.set(getTimer().monotonicNow());
     }
   }
 }

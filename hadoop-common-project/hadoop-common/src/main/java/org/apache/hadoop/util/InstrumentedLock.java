@@ -43,10 +43,10 @@ import com.google.common.annotations.VisibleForTesting;
 @InterfaceStability.Unstable
 public class InstrumentedLock implements Lock {
 
-  final Lock lock;
+  private final Lock lock;
   private final Log logger;
   private final String name;
-  final Timer clock;
+  private final Timer clock;
 
   /** Minimum gap between two lock warnings. */
   private final long minLoggingGap;
@@ -187,4 +187,11 @@ public class InstrumentedLock implements Lock {
     }
   }
 
+  protected Lock getLock() {
+    return lock;
+  }
+
+  protected Timer getTimer() {
+    return clock;
+  }
 }
