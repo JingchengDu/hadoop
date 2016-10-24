@@ -534,18 +534,6 @@ public class YarnConfiguration extends Configuration {
   public static final int
       DEFAULT_RM_SYSTEM_METRICS_PUBLISHER_DISPATCHER_POOL_SIZE = 10;
 
-  /**
-   * The {@code AMLauncher.createAMContainerLaunchContext()} method will log the
-   * command being executed to the RM log if this property is true. Commands
-   * may contain sensitive information, such as application or service
-   * passwords, making logging the commands a security risk. In cases where
-   * the cluster may be running applications with such commands, this property
-   * should be set to false. Commands are only logged at the debug level.
-   */
-  public static final String RM_AMLAUNCHER_LOG_COMMAND =
-      RM_PREFIX + "amlauncher.log.command";
-  public static final boolean DEFAULT_RM_AMLAUNCHER_LOG_COMMAND = false;
-
   //RM delegation token related keys
   public static final String RM_DELEGATION_KEY_UPDATE_INTERVAL_KEY =
     RM_PREFIX + "delegation.key.update-interval";
@@ -707,10 +695,6 @@ public class YarnConfiguration extends Configuration {
   /** URI for FileSystemRMStateStore */
   public static final String FS_RM_STATE_STORE_URI = RM_PREFIX
       + "fs.state-store.uri";
-  public static final String FS_RM_STATE_STORE_RETRY_POLICY_SPEC = RM_PREFIX
-      + "fs.state-store.retry-policy-spec";
-  public static final String DEFAULT_FS_RM_STATE_STORE_RETRY_POLICY_SPEC =
-      "2000, 500";
 
   public static final String FS_RM_STATE_STORE_NUM_RETRIES =
       RM_PREFIX + "fs.state-store.num-retries";
@@ -731,17 +715,29 @@ public class YarnConfiguration extends Configuration {
       + "leveldb-state-store.compaction-interval-secs";
   public static final long DEFAULT_RM_LEVELDB_COMPACTION_INTERVAL_SECS = 3600;
 
-  /** The maximum number of completed applications RM keeps. */ 
+  /**
+   * The maximum number of completed applications RM keeps. By default equals
+   * to {@link #DEFAULT_RM_MAX_COMPLETED_APPLICATIONS}.
+   */
   public static final String RM_MAX_COMPLETED_APPLICATIONS =
     RM_PREFIX + "max-completed-applications";
-  public static final int DEFAULT_RM_MAX_COMPLETED_APPLICATIONS = 10000;
+  public static final int DEFAULT_RM_MAX_COMPLETED_APPLICATIONS = 1000;
 
   /**
-   * The maximum number of completed applications RM state store keeps, by
-   * default equals to DEFAULT_RM_MAX_COMPLETED_APPLICATIONS
+   * The maximum number of completed applications RM state store keeps. By
+   * default equals to value of {@link #RM_MAX_COMPLETED_APPLICATIONS}.
    */
   public static final String RM_STATE_STORE_MAX_COMPLETED_APPLICATIONS =
       RM_PREFIX + "state-store.max-completed-applications";
+  /**
+   * The default value for
+   * {@code yarn.resourcemanager.state-store.max-completed-applications}.
+   * @deprecated This default value is ignored and will be removed in a future
+   * release. The default value of
+   * {@code yarn.resourcemanager.state-store.max-completed-applications} is the
+   * value of {@link #RM_MAX_COMPLETED_APPLICATIONS}.
+   */
+  @Deprecated
   public static final int DEFAULT_RM_STATE_STORE_MAX_COMPLETED_APPLICATIONS =
       DEFAULT_RM_MAX_COMPLETED_APPLICATIONS;
 
@@ -1106,7 +1102,7 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_VMEM_PMEM_RATIO =
     NM_PREFIX + "vmem-pmem-ratio";
   public static final float DEFAULT_NM_VMEM_PMEM_RATIO = 2.1f;
-  
+
   /** Number of Virtual CPU Cores which can be allocated for containers.*/
   public static final String NM_VCORES = NM_PREFIX + "resource.cpu-vcores";
   public static final int DEFAULT_NM_VCORES = 8;
@@ -1258,6 +1254,10 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_RESOURCE_MON_INTERVAL_MS =
       NM_PREFIX + "resource-monitor.interval-ms";
   public static final int DEFAULT_NM_RESOURCE_MON_INTERVAL_MS = 3000;
+
+  public static final String NM_CONTAINER_MONITOR_ENABLED =
+      NM_PREFIX + "container-monitor.enabled";
+  public static final boolean DEFAULT_NM_CONTAINER_MONITOR_ENABLED = true;
 
   /** How often to monitor containers.*/
   public final static String NM_CONTAINER_MON_INTERVAL_MS =
@@ -1541,6 +1541,12 @@ public class YarnConfiguration extends Configuration {
       false;
 
 
+  // Configurations for applicaiton life time monitor feature
+  public static final String RM_APPLICATION_LIFETIME_MONITOR_INTERVAL_MS =
+      RM_PREFIX + "application-timeouts.lifetime-monitor.interval-ms";
+
+  public static final long DEFAULT_RM_APPLICATION_LIFETIME_MONITOR_INTERVAL_MS =
+      60000;
 
   /**
    * Interval of time the linux container executor should try cleaning up
@@ -1963,13 +1969,6 @@ public class YarnConfiguration extends Configuration {
   public static final int
       TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_UNKNOWN_ACTIVE_SECONDS_DEFAULT
       = 24 * 60 * 60;
-
-  public static final String
-      TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_RETRY_POLICY_SPEC =
-      TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_PREFIX + "retry-policy-spec";
-  public static final String
-      DEFAULT_TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_RETRY_POLICY_SPEC =
-      "2000, 500";
 
   public static final String TIMELINE_SERVICE_LEVELDB_CACHE_READ_CACHE_SIZE =
       TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_PREFIX
@@ -2590,11 +2589,7 @@ public class YarnConfiguration extends Configuration {
   /** URI for NodeLabelManager */
   public static final String FS_NODE_LABELS_STORE_ROOT_DIR = NODE_LABELS_PREFIX
       + "fs-store.root-dir";
-  public static final String FS_NODE_LABELS_STORE_RETRY_POLICY_SPEC =
-      NODE_LABELS_PREFIX + "fs-store.retry-policy-spec";
-  public static final String DEFAULT_FS_NODE_LABELS_STORE_RETRY_POLICY_SPEC =
-      "2000, 500";
-  
+
   /**
    * Flag to indicate if the node labels feature enabled, by default it's
    * disabled

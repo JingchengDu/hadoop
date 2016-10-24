@@ -299,19 +299,6 @@
   </property>
 
   <property>
-    <description>
-      The resource manager will log all commands being executed to the RM log
-      if this property is true. Commands may contain sensitive information,
-      such as application or service passwords, making logging the commands a
-      security risk. In cases where the cluster may be running applications with
-      such commands this property should be set to false. Commands are only
-      logged at the debug level.
-    </description>
-    <name>yarn.resourcemanager.amlauncher.log.command</name>
-    <value>false</value>
-  </property>
-
-  <property>
     <description>The class to use as the resource scheduler.</description>
     <name>yarn.resourcemanager.scheduler.class</name>
     <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler</value>
@@ -430,7 +417,7 @@
     the applications remembered in RM memory.
     Any values larger than ${yarn.resourcemanager.max-completed-applications} will
     be reset to ${yarn.resourcemanager.max-completed-applications}.
-    Note that this value impacts the RM recovery performance.Typically,
+    Note that this value impacts the RM recovery performance. Typically,
     a smaller value indicates better performance on RM recovery.
     </description>
     <name>yarn.resourcemanager.state-store.max-completed-applications</name>
@@ -532,16 +519,6 @@
     <name>yarn.resourcemanager.fs.state-store.uri</name>
     <value>${hadoop.tmp.dir}/yarn/system/rmstore</value>
     <!--value>hdfs://localhost:9000/rmstore</value-->
-  </property>
-
-  <property>
-    <description>hdfs client retry policy specification. hdfs client retry
-    is always enabled. Specified in pairs of sleep-time and number-of-retries
-    and (t0, n0), (t1, n1), ..., the first n0 retries sleep t0 milliseconds on
-    average, the following n1 retries sleep t1 milliseconds on average, and so on.
-    </description>
-    <name>yarn.resourcemanager.fs.state-store.retry-policy-spec</name>
-    <value>2000, 500</value>
   </property>
 
   <property>
@@ -700,7 +677,7 @@
   <property>
     <description>The maximum number of completed applications RM keeps. </description>
     <name>yarn.resourcemanager.max-completed-applications</name>
-    <value>10000</value>
+    <value>1000</value>
   </property>
 
   <property>
@@ -1362,6 +1339,12 @@
   <property>
     <description>Class that calculates current resource utilization.</description>
     <name>yarn.nodemanager.resource-calculator.class</name>
+  </property>
+
+  <property>
+    <description>Enable container monitor</description>
+    <name>yarn.nodemanager.container-monitor.enabled</name>
+    <value>true</value>
   </property>
 
   <property>
@@ -2490,16 +2473,6 @@
 
   <property>
     <description>
-    Retry policy used for FileSystem node label store. The policy is
-    specified by N pairs of sleep-time in milliseconds and number-of-retries
-    "s1,n1,s2,n2,...".
-    </description>
-    <name>yarn.node-labels.fs-store.retry-policy-spec</name>
-    <value>2000, 500</value>
-  </property>
-
-  <property>
-    <description>
     URI for NodeLabelManager.  The default value is
     /tmp/hadoop-yarn-${user}/node-labels/ in the local filesystem.
     </description>
@@ -3082,4 +3055,13 @@
     <name>yarn.resourcemanager.node-removal-untracked.timeout-ms</name>
     <value>60000</value>
   </property>
+
+  <property>
+    <description>
+    The RMAppLifetimeMonitor Service uses this value as lifetime monitor interval
+    </description>
+    <name>yarn.resourcemanager.application-timeouts.lifetime-monitor.interval-ms</name>
+    <value>60000</value>
+  </property>
+
 </configuration>

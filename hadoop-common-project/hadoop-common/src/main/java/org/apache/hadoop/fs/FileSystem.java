@@ -1524,13 +1524,14 @@ public abstract class FileSystem extends Configured implements Closeable {
    * <p>
    * Does not guarantee to return the List of files/directories status in a
    * sorted order.
+   * <p>
+   * Will not return null. Expect IOException upon access error.
    * @param f given path
    * @return the statuses of the files/directories in the given patch
-   * @throws FileNotFoundException when the path does not exist;
-   *         IOException see specific implementation
+   * @throws FileNotFoundException when the path does not exist
+   * @throws IOException see specific implementation
    */
-  public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException, 
-                                                         IOException;
+  public abstract FileStatus[] listStatus(Path f) throws IOException;
 
   /**
    * Represents a batch of directory entries when iteratively listing a
@@ -1600,10 +1601,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   private void listStatus(ArrayList<FileStatus> results, Path f,
       PathFilter filter) throws FileNotFoundException, IOException {
     FileStatus listing[] = listStatus(f);
-    if (listing == null) {
-      throw new IOException("Error accessing " + f);
-    }
-
+    Preconditions.checkNotNull(listing, "listStatus should not return NULL");
     for (int i = 0; i < listing.length; i++) {
       if (filter.accept(listing[i].getPath())) {
         results.add(listing[i]);
@@ -2858,7 +2856,15 @@ public abstract class FileSystem extends Configured implements Closeable {
                   ClassUtil.findContainingJar(fs.getClass()), e);
             }
           } catch (ServiceConfigurationError ee) {
-            LOG.warn("Cannot load filesystem", ee);
+            LOG.warn("Cannot load filesystem: " + ee);
+            Throwable cause = ee.getCause();
+            // print all the nested exception messages
+            while (cause != null) {
+              LOG.warn(cause.toString());
+              cause = cause.getCause();
+            }
+            // and at debug: the full stack
+            LOG.debug("Stack Trace", ee);
           }
         }
         FILE_SYSTEMS_LOADED = true;

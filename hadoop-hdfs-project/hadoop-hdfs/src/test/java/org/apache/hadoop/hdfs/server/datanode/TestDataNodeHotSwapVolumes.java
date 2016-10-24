@@ -52,7 +52,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -519,11 +518,8 @@ public class TestDataNodeHotSwapVolumes {
     ExtendedBlock block =
         DFSTestUtil.getAllBlocks(fs, testFile).get(1).getBlock();
     FsVolumeSpi volumeWithBlock = dn.getFSDataset().getVolume(block);
-    String basePath = volumeWithBlock.getBasePath();
-    File storageDir = new File(basePath);
-    URI fileUri = storageDir.toURI();
-    String dirWithBlock =
-        "[" + volumeWithBlock.getStorageType() + "]" + fileUri;
+    String dirWithBlock = "[" + volumeWithBlock.getStorageType() + "]" +
+        volumeWithBlock.getStorageLocation().getFile().toURI();
     String newDirs = dirWithBlock;
     for (String dir : oldDirs) {
       if (dirWithBlock.startsWith(dir)) {
@@ -581,8 +577,8 @@ public class TestDataNodeHotSwapVolumes {
     try (FsDatasetSpi.FsVolumeReferences volumes =
         dataset.getFsVolumeReferences()) {
       for (FsVolumeSpi volume : volumes) {
-        assertThat(volume.getBasePath(), is(not(anyOf(
-            is(newDirs.get(0)), is(newDirs.get(2))))));
+        assertThat(volume.getStorageLocation().getFile().toString(),
+            is(not(anyOf(is(newDirs.get(0)), is(newDirs.get(2))))));
       }
     }
     DataStorage storage = dn.getStorage();
@@ -646,8 +642,6 @@ public class TestDataNodeHotSwapVolumes {
     final DataNode dn = cluster.getDataNodes().get(dataNodeIdx);
     final FileSystem fs = cluster.getFileSystem();
     final Path testFile = new Path("/test");
-    final long lastTimeDiskErrorCheck = dn.getLastDiskErrorCheck();
-
     FSDataOutputStream out = fs.create(testFile, REPLICATION);
 
     Random rb = new Random(0);
@@ -703,16 +697,23 @@ public class TestDataNodeHotSwapVolumes {
 
     reconfigThread.join();
 
+    // Verify if the data directory reconfigure was successful
+    FsDatasetSpi<? extends FsVolumeSpi> fsDatasetSpi = dn.getFSDataset();
+    try (FsDatasetSpi.FsVolumeReferences fsVolumeReferences = fsDatasetSpi
+        .getFsVolumeReferences()) {
+      for (int i =0; i < fsVolumeReferences.size(); i++) {
+        System.out.println("Vol: " +
+            fsVolumeReferences.get(i).getBaseURI().toString());
+      }
+      assertEquals("Volume remove wasn't successful.",
+          1, fsVolumeReferences.size());
+    }
+
     // Verify the file has sufficient replications.
     DFSTestUtil.waitReplication(fs, testFile, REPLICATION);
     // Read the content back
     byte[] content = DFSTestUtil.readFileBuffer(fs, testFile);
     assertEquals(BLOCK_SIZE, content.length);
-
-    // If an IOException thrown from BlockReceiver#run, it triggers
-    // DataNode#checkDiskError(). So we can test whether checkDiskError() is called,
-    // to see whether there is IOException in BlockReceiver#run().
-    assertEquals(lastTimeDiskErrorCheck, dn.getLastDiskErrorCheck());
 
     if (!exceptions.isEmpty()) {
       throw new IOException(exceptions.get(0).getCause());
@@ -765,7 +766,7 @@ public class TestDataNodeHotSwapVolumes {
     try (FsDatasetSpi.FsVolumeReferences volumes =
       dn.getFSDataset().getFsVolumeReferences()) {
       for (FsVolumeSpi vol : volumes) {
-        if (vol.getBasePath().equals(basePath.getPath())) {
+        if (vol.getBaseURI().equals(basePath.toURI())) {
           return (FsVolumeImpl) vol;
         }
       }
@@ -810,6 +811,7 @@ public class TestDataNodeHotSwapVolumes {
     assertEquals(used, failedVolume.getDfsUsed());
 
     DataNodeTestUtils.restoreDataDirFromFailure(dirToFail);
+    LOG.info("reconfiguring DN ");
     assertThat(
         "DN did not update its own config",
         dn.reconfigurePropertyImpl(DFS_DATANODE_DATA_DIR_KEY, oldDataDir),
