@@ -38,14 +38,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReadWriteLock;
 
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -58,8 +58,6 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
-import org.apache.hadoop.hdfs.InstrumentedAutoCloseableReadWriteLockWrapper;
-import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
@@ -70,7 +68,6 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetricHelper;
 import org.apache.hadoop.hdfs.server.datanode.DataStorage;
 import org.apache.hadoop.hdfs.server.datanode.DatanodeUtil;
 import org.apache.hadoop.hdfs.server.datanode.Replica;
@@ -91,6 +88,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.RoundRobinVolumeChoosingPolicy;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.VolumeChoosingPolicy;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaTracker.RamDiskReplica;
+import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetricHelper;
 import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
@@ -105,15 +103,17 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
-import org.apache.hadoop.util.InstrumentedLock;
+import org.apache.hadoop.util.InstrumentedReadWriteLock;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Timer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -273,14 +273,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
     boolean useFairLock = conf.getBoolean("dfs.datanode.dataset.lock.fair",
         true);
-    InstrumentedAutoCloseableReadWriteLockWrapper readWriteLock =
-        new InstrumentedAutoCloseableReadWriteLockWrapper(
-        useFairLock, getClass().getName(), LOG, conf.getTimeDuration(
+    ReadWriteLock readWriteLock = new InstrumentedReadWriteLock(useFairLock,
+        getClass().getName(), LOG,
+        conf.getTimeDuration(
         DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_KEY,
         DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT,
         TimeUnit.MILLISECONDS), 300);
-    this.datasetReadLock = readWriteLock.readLock();
-    this.datasetWriteLock = readWriteLock.writeLock();
+    this.datasetReadLock = new AutoCloseableLock(readWriteLock.readLock());
+    this.datasetWriteLock = new AutoCloseableLock(readWriteLock.writeLock());
     blockOpLocksSize = conf.getInt("dfs.datanode.dataset.lock.size", 1024);
     blockOpLocks = new Object[blockOpLocksSize];
     for (int i = 0; i < blockOpLocksSize; i++) {
@@ -821,12 +821,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     if (info == null) {
       if (volumeMap.get(b.getBlockPoolId(), b.getLocalBlock().getBlockId())
           == null) {
-      throw new ReplicaNotFoundException(
-          ReplicaNotFoundException.NON_EXISTENT_REPLICA + b);
+        throw new ReplicaNotFoundException(
+            ReplicaNotFoundException.NON_EXISTENT_REPLICA + b);
       } else {
         throw new ReplicaNotFoundException(
             ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + b);
-    }
+      }
     }
     return info;
   }
@@ -1572,8 +1572,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           } else {
             if (!(currentReplicaInfo.getGenerationStamp() < b
                 .getGenerationStamp()
-                  && (currentReplicaInfo.getState() == ReplicaState.TEMPORARY
-                      || currentReplicaInfo.getState() == ReplicaState.RBW))) {
+                && (currentReplicaInfo.getState() == ReplicaState.TEMPORARY
+                    || currentReplicaInfo.getState() == ReplicaState.RBW))) {
               throw new ReplicaAlreadyExistsException("Block " + b
                   + " already exists in state " + currentReplicaInfo.getState()
                   + " and thus cannot be created.");
@@ -2258,7 +2258,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
         final long diskGS = diskMetaFile != null && diskMetaFile.exists() ?
             Block.getGenerationStamp(diskMetaFile.getName()) :
-              HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+                HdfsConstants.GRANDFATHER_GENERATION_STAMP;
 
         if (diskFile == null || !diskFile.exists()) {
           if (memBlockInfo == null) {
@@ -3057,8 +3057,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             // Move the replica from lazyPersist/ to finalized/ on
             // the target volume
             newReplicaInfo =
-              replicaState.getLazyPersistVolume().activateSavedReplica(bpid,
-                  replicaInfo, replicaState);
+                replicaState.getLazyPersistVolume().activateSavedReplica(bpid,
+                    replicaInfo, replicaState);
 
             // Update the volumeMap entry.
             volumeMap.add(bpid, newReplicaInfo);
