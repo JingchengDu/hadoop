@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -59,7 +60,6 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.AutoCloseableLock;
-import org.apache.hadoop.util.AutoCloseableReadWriteLockWrapper;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -426,11 +426,11 @@ public class TestInterDatanodeProtocol {
   }
 
   /**
-   * Creates a instance of AutoCloseableLock.
+   * Creates an instance of AutoCloseableLock.
    */
   private static AutoCloseableLock createDatasetWriteLock() {
-    AutoCloseableReadWriteLockWrapper readWriteLock =
-        new AutoCloseableReadWriteLockWrapper(true);
-    return readWriteLock.writeLock();
+    ReentrantReadWriteLock readWriteLock =
+        new ReentrantReadWriteLock(true);
+    return new AutoCloseableLock(readWriteLock.writeLock());
   }
 }
