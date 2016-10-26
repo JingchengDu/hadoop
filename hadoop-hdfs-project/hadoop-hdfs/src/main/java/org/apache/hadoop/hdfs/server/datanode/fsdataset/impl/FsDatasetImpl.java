@@ -1947,18 +1947,18 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         synchronized (getBlockOpLock(invalidBlks[i].getBlockId())) {
           final ReplicaInfo info = volumeMap.get(bpid, invalidBlks[i]);
           if (info == null) {
-          ReplicaInfo infoByBlockId =
-              volumeMap.get(bpid, invalidBlks[i].getBlockId());
-          if (infoByBlockId == null) {
-            // It is okay if the block is not found -- it
-            // may be deleted earlier.
-            LOG.info("Failed to delete replica " + invalidBlks[i]
-                + ": ReplicaInfo not found.");
-          } else {
-            errors.add("Failed to delete replica " + invalidBlks[i]
-                + ": GenerationStamp not matched, existing replica is "
-                + Block.toString(infoByBlockId));
-          }
+            ReplicaInfo infoByBlockId =
+                volumeMap.get(bpid, invalidBlks[i].getBlockId());
+            if (infoByBlockId == null) {
+              // It is okay if the block is not found -- it
+              // may be deleted earlier.
+              LOG.info("Failed to delete replica " + invalidBlks[i]
+                  + ": ReplicaInfo not found.");
+            } else {
+              errors.add("Failed to delete replica " + invalidBlks[i]
+                  + ": GenerationStamp not matched, existing replica is "
+                  + Block.toString(infoByBlockId));
+            }
             continue;
           }
 
@@ -2333,8 +2333,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
                       .setFsVolume(vol)
                       .setDirectoryToUse(diskFile.getParentFile())
                       .build();
-              ((FsVolumeImpl) vol).resolveDuplicateReplicas(bpid,
-                  memBlockInfo, diskBlockInfo, volumeMap);
+                ((FsVolumeImpl) vol).resolveDuplicateReplicas(bpid,
+                    memBlockInfo, diskBlockInfo, volumeMap);
               }
             } else {
               if (!diskFile.delete()) {
