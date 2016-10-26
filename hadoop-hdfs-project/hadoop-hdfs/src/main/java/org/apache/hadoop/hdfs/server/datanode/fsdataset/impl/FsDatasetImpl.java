@@ -271,8 +271,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     this.dataStorage = storage;
     this.conf = conf;
     this.smallBufferSize = DFSUtilClient.getSmallBufferSize(conf);
-    boolean useFairLock = conf.getBoolean("dfs.datanode.dataset.lock.fair",
-        true);
+    boolean useFairLock = conf.getBoolean(
+        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_FAIR,
+        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_FAIR_DEFAULT);
     ReadWriteLock readWriteLock = new InstrumentedReadWriteLock(useFairLock,
         getClass().getName(), LOG,
         conf.getTimeDuration(
@@ -281,7 +282,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         TimeUnit.MILLISECONDS), 300);
     this.datasetReadLock = new AutoCloseableLock(readWriteLock.readLock());
     this.datasetWriteLock = new AutoCloseableLock(readWriteLock.writeLock());
-    blockOpLocksSize = conf.getInt("dfs.datanode.dataset.lock.size", 1024);
+    blockOpLocksSize = conf.getInt(
+        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_SIZE,
+        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_SIZE_DEFAULT);
     blockOpLocks = new Object[blockOpLocksSize];
     for (int i = 0; i < blockOpLocksSize; i++) {
       blockOpLocks[i] = new Object();
