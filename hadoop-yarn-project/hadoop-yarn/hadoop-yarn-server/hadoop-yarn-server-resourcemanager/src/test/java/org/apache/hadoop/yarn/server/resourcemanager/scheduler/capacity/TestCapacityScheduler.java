@@ -283,10 +283,8 @@ public class TestCapacityScheduler {
           Resources.createResource(2 * GB, 1));
 
     // ResourceRequest priorities
-    Priority priority_0 = 
-      org.apache.hadoop.yarn.server.resourcemanager.resource.Priority.create(0); 
-    Priority priority_1 = 
-      org.apache.hadoop.yarn.server.resourcemanager.resource.Priority.create(1);
+    Priority priority_0 = Priority.newInstance(0);
+    Priority priority_1 = Priority.newInstance(1);
     
     // Submit an application
     Application application_0 = new Application("user_0", "a1", resourceManager);
@@ -1514,12 +1512,8 @@ public class TestCapacityScheduler {
             Resources.createResource(2 * GB, 1));
 
     // ResourceRequest priorities
-    Priority priority_0 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(0);
-    Priority priority_1 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(1);
+    Priority priority_0 = Priority.newInstance(0);
+    Priority priority_1 = Priority.newInstance(1);
 
     // Submit application_0
     Application application_0 =
@@ -1634,12 +1628,8 @@ public class TestCapacityScheduler {
             Resources.createResource(5 * GB, 1));
 
     // ResourceRequest priorities
-    Priority priority_0 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(0);
-    Priority priority_1 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(1);
+    Priority priority_0 = Priority.newInstance(0);
+    Priority priority_1 = Priority.newInstance(1);
 
     // Submit application_0
     Application application_0 =
@@ -1754,12 +1744,8 @@ public class TestCapacityScheduler {
             Resources.createResource(6 * GB, 1));
 
     // ResourceRequest priorities
-    Priority priority_0 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(0);
-    Priority priority_1 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(1);
+    Priority priority_0 = Priority.newInstance(0);
+    Priority priority_1 = Priority.newInstance(1);
 
     // Submit application_0
     Application application_0 =
@@ -1812,12 +1798,8 @@ public class TestCapacityScheduler {
             Resources.createResource(5 * GB, 1));
 
     // ResourceRequest priorities
-    Priority priority_0 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(0);
-    Priority priority_1 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(1);
+    Priority priority_0 = Priority.newInstance(0);
+    Priority priority_1 = Priority.newInstance(1);
 
     // Submit application_0
     Application application_0 =
@@ -2934,12 +2916,14 @@ public class TestCapacityScheduler {
   @Test(timeout = 30000)
   public void testAMUsedResource() throws Exception {
     MockRM rm = setUpMove();
+    rm.registerNode("127.0.0.1:1234", 4 * GB);
+
     Configuration conf = rm.getConfig();
     int minAllocMb =
         conf.getInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
     int amMemory = 50;
-    assertTrue("AM memory is greater than or equql to minAllocation",
+    assertTrue("AM memory is greater than or equal to minAllocation",
         amMemory < minAllocMb);
     Resource minAllocResource = Resource.newInstance(minAllocMb, 1);
     String queueName = "a1";
@@ -3288,6 +3272,7 @@ public class TestCapacityScheduler {
   private void verifyAMLimitForLeafQueue(CapacitySchedulerConfiguration config)
       throws Exception {
     MockRM rm = setUpMove(config);
+    rm.registerNode("127.0.0.1:1234", 2 * GB);
 
     String queueName = "a1";
     String userName = "user_0";
@@ -3385,9 +3370,7 @@ public class TestCapacityScheduler {
         registerNode(host_0, 1234, 2345, NetworkTopology.DEFAULT_RACK,
             Resources.createResource(8 * GB, 4));
     // ResourceRequest priorities
-    Priority priority_0 =
-        org.apache.hadoop.yarn.server.resourcemanager.resource.Priority
-            .create(0);
+    Priority priority_0 = Priority.newInstance(0);
 
     // Submit an application
     Application application_0 =
