@@ -449,11 +449,6 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
   }
 
   @Override
-  public AutoCloseableLock acquireDatasetLock() {
-    return acquireDatasetWriteLock();
-  }
-
-  @Override
   public AutoCloseableLock acquireDatasetReadLock() {
     return null;
   }
