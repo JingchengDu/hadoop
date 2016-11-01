@@ -244,7 +244,7 @@ class BlockSender implements java.io.Closeable {
       }
       
       final long replicaVisibleLength;
-      try(AutoCloseableLock lock = datanode.data.acquireDatasetLock()) {
+      try(AutoCloseableLock lock = datanode.data.acquireDatasetWriteLock()) {
         replica = getReplica(block, datanode);
         replicaVisibleLength = replica.getVisibleLength();
       }

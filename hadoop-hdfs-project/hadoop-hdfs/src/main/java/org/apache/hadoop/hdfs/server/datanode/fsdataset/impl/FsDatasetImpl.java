@@ -216,7 +216,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
     return null;
   }
-  
+
   @Override // FsDatasetSpi
   public LengthInputStream getMetaDataInputStream(ExtendedBlock b)
       throws IOException {
@@ -226,7 +226,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
     return info.getMetadataInputStream(0);
   }
-    
+
   final DataNode datanode;
   final DataStorage dataStorage;
   private final FsVolumeList volumes;
@@ -361,11 +361,6 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     maxDataLength = conf.getInt(
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH,
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT);
-  }
-
-  @Override
-  public AutoCloseableLock acquireDatasetLock() {
-    return acquireDatasetWriteLock();
   }
 
   @Override
