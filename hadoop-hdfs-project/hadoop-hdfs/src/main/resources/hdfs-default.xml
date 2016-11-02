@@ -4321,4 +4321,19 @@
       call queue</description>
   </property>
 
+  <property>
+    <name>dfs.datanode.dataset.lock.fair</name>
+    <value>true</value>
+    <description>This enables the fair mode of the read-write lock
+      on the dataset</description>
+  </property>
+
+  <property>
+    <name>dfs.datanode.dataset.lock.size</name>
+    <value>1024</value>
+    <description>
+      The size of the lock pool in the dataset
+    </description>
+  </property>
+
 </configuration>
