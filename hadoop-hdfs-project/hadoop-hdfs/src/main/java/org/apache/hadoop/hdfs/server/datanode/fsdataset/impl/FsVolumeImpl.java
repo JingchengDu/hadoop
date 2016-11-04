@@ -334,7 +334,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   private void decDfsUsedAndNumBlocks(String bpid, long value,
                                       boolean blockFileDeleted) {
-    try(AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
+    try (AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.decDfsUsed(value);
@@ -346,7 +346,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void incDfsUsedAndNumBlocks(String bpid, long value) {
-    try(AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
+    try (AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.incDfsUsed(value);
@@ -356,7 +356,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void incDfsUsed(String bpid, long value) {
-    try(AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
+    try (AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.incDfsUsed(value);
@@ -367,7 +367,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   @VisibleForTesting
   public long getDfsUsed() throws IOException {
     long dfsUsed = 0;
-    try(AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
+    try (AutoCloseableLock lock = dataset.acquireDatasetReadLock()) {
       for(BlockPoolSlice s : bpSlices.values()) {
         dfsUsed += s.getDfsUsed();
       }

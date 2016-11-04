@@ -1355,7 +1355,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_DATANODE_DATASET_LOCK_FAIR =
       "dfs.datanode.dataset.lock.fair";
   public static final boolean DFS_DATANODE_DATASET_LOCK_FAIR_DEFAULT = true;
-  public static final String DFS_DATANODE_DATASET_LOCK_SIZE =
-      "dfs.datanode.dataset.lock.size";
-  public static final int DFS_DATANODE_DATASET_LOCK_SIZE_DEFAULT = 1024;
+  public static final String DFS_DATANODE_DATASET_BLOCK_OP_LOCK_SIZE =
+      "dfs.datanode.dataset.block.op.lock.size";
+  public static final int DFS_DATANODE_DATASET_BLOCK_OP_LOCK_SIZE_DEFAULT =
+      1024;
 }

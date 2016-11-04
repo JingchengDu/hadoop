@@ -4329,10 +4329,10 @@
   </property>
 
   <property>
-    <name>dfs.datanode.dataset.lock.size</name>
+    <name>dfs.datanode.dataset.block.op.lock.size</name>
     <value>1024</value>
-    <description>
-      The size of the lock pool in the dataset
+    <description>The size of the lock pool that is used for block operations
+      in the dataset
     </description>
   </property>
 

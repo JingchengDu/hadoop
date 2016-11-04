@@ -52,7 +52,7 @@ class ReplicaMap {
   ReplicaMap(Object mutex) {
     if (mutex == null) {
       throw new HadoopIllegalArgumentException(
-          "Object to synchronize on cannot be null");
+          "Mutex to synchronize on cannot be null");
     }
     this.mutex = mutex;
   }

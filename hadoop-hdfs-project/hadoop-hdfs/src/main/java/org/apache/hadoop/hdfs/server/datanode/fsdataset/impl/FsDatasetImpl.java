@@ -283,8 +283,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     this.datasetReadLock = new AutoCloseableLock(readWriteLock.readLock());
     this.datasetWriteLock = new AutoCloseableLock(readWriteLock.writeLock());
     blockOpLocksSize = conf.getInt(
-        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_SIZE,
-        DFSConfigKeys.DFS_DATANODE_DATASET_LOCK_SIZE_DEFAULT);
+        DFSConfigKeys.DFS_DATANODE_DATASET_BLOCK_OP_LOCK_SIZE,
+        DFSConfigKeys.DFS_DATANODE_DATASET_BLOCK_OP_LOCK_SIZE_DEFAULT);
     blockOpLocks = new Object[blockOpLocksSize];
     for (int i = 0; i < blockOpLocksSize; i++) {
       blockOpLocks[i] = new Object();
