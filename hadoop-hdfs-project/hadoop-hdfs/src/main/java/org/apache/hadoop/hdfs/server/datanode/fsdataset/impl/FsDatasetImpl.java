@@ -252,6 +252,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   private boolean blockPinningEnabled;
   private final int maxDataLength;
 
+  @VisibleForTesting
   final ReadWriteLock datasetReadWriteLock;
   private final AutoCloseableLock datasetReadLock;
   private final AutoCloseableLock datasetWriteLock;
