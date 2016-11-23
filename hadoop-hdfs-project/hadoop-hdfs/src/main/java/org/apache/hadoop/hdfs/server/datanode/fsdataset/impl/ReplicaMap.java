@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -33,8 +34,9 @@ import org.apache.hadoop.util.AutoCloseableLock;
  */
 class ReplicaMap {
   // Lock object to synchronize this instance.
-  private final AutoCloseableLock lock;
-  
+  private final AutoCloseableLock readLock;
+  private final AutoCloseableLock writeLock;
+
   // Map of block pool Id to a set of ReplicaInfo.
   private final Map<String, FoldedTreeSet<ReplicaInfo>> map = new HashMap<>();
 
@@ -50,16 +52,17 @@ class ReplicaMap {
         }
       };
 
-  ReplicaMap(AutoCloseableLock lock) {
-    if (lock == null) {
+  ReplicaMap(ReadWriteLock readWriteLock) {
+    if (readWriteLock == null) {
       throw new HadoopIllegalArgumentException(
           "Lock to synchronize on cannot be null");
     }
-    this.lock = lock;
+    this.readLock = new AutoCloseableLock(readWriteLock.readLock());
+    this.writeLock = new AutoCloseableLock(readWriteLock.writeLock());
   }
   
   String[] getBlockPoolList() {
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = readLock.acquire()) {
       return map.keySet().toArray(new String[map.keySet().size()]);   
     }
   }
@@ -104,7 +107,7 @@ class ReplicaMap {
    */
   ReplicaInfo get(String bpid, long blockId) {
     checkBlockPool(bpid);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = readLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       if (set == null) {
         return null;
@@ -124,7 +127,7 @@ class ReplicaMap {
   ReplicaInfo add(String bpid, ReplicaInfo replicaInfo) {
     checkBlockPool(bpid);
     checkBlock(replicaInfo);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = writeLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       if (set == null) {
         // Add an entry for block pool if it does not exist already
@@ -153,7 +156,7 @@ class ReplicaMap {
   ReplicaInfo remove(String bpid, Block block) {
     checkBlockPool(bpid);
     checkBlock(block);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = writeLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       if (set != null) {
         ReplicaInfo replicaInfo =
@@ -176,7 +179,7 @@ class ReplicaMap {
    */
   ReplicaInfo remove(String bpid, long blockId) {
     checkBlockPool(bpid);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = writeLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       if (set != null) {
         return set.removeAndGet(blockId, LONG_AND_BLOCK_COMPARATOR);
@@ -191,7 +194,7 @@ class ReplicaMap {
    * @return the number of replicas in the map
    */
   int size(String bpid) {
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = readLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       return set != null ? set.size() : 0;
     }
@@ -213,7 +216,7 @@ class ReplicaMap {
 
   void initBlockPool(String bpid) {
     checkBlockPool(bpid);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = writeLock.acquire()) {
       FoldedTreeSet<ReplicaInfo> set = map.get(bpid);
       if (set == null) {
         // Add an entry for block pool if it does not exist already
@@ -225,16 +228,24 @@ class ReplicaMap {
   
   void cleanUpBlockPool(String bpid) {
     checkBlockPool(bpid);
-    try (AutoCloseableLock l = lock.acquire()) {
+    try (AutoCloseableLock l = writeLock.acquire()) {
       map.remove(bpid);
     }
   }
-  
+
   /**
-   * Get the lock object used for synchronizing ReplicasMap
-   * @return lock object
+   * Gets the read lock object used for synchronizing ReplicasMap
+   * @return read lock object
    */
-  AutoCloseableLock getLock() {
-    return lock;
+  AutoCloseableLock getReadLock() {
+    return readLock;
+  }
+
+  /**
+   * Gets the write lock object used for synchronizing ReplicasMap
+   * @return write lock object
+   */
+  AutoCloseableLock getWriteLock() {
+    return writeLock;
   }
 }

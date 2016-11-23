@@ -727,7 +727,8 @@ public class TestBlockRecovery {
             final RecoveringBlock recoveringBlock = new RecoveringBlock(
                 block.getBlock(), locations, block.getBlock()
                     .getGenerationStamp() + 1);
-            try(AutoCloseableLock lock = dataNode.data.acquireDatasetLock()) {
+            try(AutoCloseableLock lock =
+                dataNode.data.acquireDatasetWriteLock()) {
               Thread.sleep(2000);
               dataNode.initReplicaRecovery(recoveringBlock);
             }

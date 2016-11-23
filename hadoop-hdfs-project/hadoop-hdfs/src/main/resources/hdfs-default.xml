@@ -4383,5 +4383,11 @@
       is assumed.
     </description>
   </property>
-
+  <property>
+    <name>dfs.datanode.dataset.lock.fair</name>
+    <value>true</value>
+    <description>
+      This enables the fair mode of the read-write lock on the dataset.
+    </description>
+  </property>
 </configuration>

@@ -648,7 +648,12 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
       FsVolumeSpi destination) throws IOException;
 
   /**
-   * Acquire the lock of the data set.
+   * Acquires the read lock of the data set.
    */
-  AutoCloseableLock acquireDatasetLock();
+  AutoCloseableLock acquireDatasetReadLock();
+
+  /**
+   * Acquires the write lock of the data set.
+   */
+  AutoCloseableLock acquireDatasetWriteLock();
 }

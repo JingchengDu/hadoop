@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
@@ -121,7 +123,8 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   
   static final byte[] nullCrcFileData;
 
-  private final AutoCloseableLock datasetLock;
+  private final AutoCloseableLock datasetReadLock;
+  private final AutoCloseableLock datasetWriteLock;
 
   static {
     DataChecksum checksum = DataChecksum.newDataChecksum(
@@ -587,7 +590,9 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
         conf.getLong(CONFIG_PROPERTY_CAPACITY, DEFAULT_CAPACITY),
         conf.getEnum(CONFIG_PROPERTY_STATE, DEFAULT_STATE));
     this.volume = new SimulatedVolume(this.storage);
-    this.datasetLock = new AutoCloseableLock();
+    ReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
+    this.datasetReadLock = new AutoCloseableLock(readWriteLock.readLock());
+    this.datasetWriteLock = new AutoCloseableLock(readWriteLock.writeLock());
   }
 
   public synchronized void injectBlocks(String bpid,
@@ -1401,8 +1406,13 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override
-  public AutoCloseableLock acquireDatasetLock() {
-    return datasetLock.acquire();
+  public AutoCloseableLock acquireDatasetReadLock() {
+    return datasetReadLock.acquire();
+  }
+
+  @Override
+  public AutoCloseableLock acquireDatasetWriteLock() {
+    return datasetWriteLock.acquire();
   }
 }
 

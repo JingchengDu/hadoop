@@ -37,7 +37,7 @@ public class InstrumentedReadWriteLock implements ReadWriteLock {
   private final Lock readLock;
   private final Lock writeLock;
 
-  InstrumentedReadWriteLock(boolean fair, String name, Log logger,
+  public InstrumentedReadWriteLock(boolean fair, String name, Log logger,
       long minLoggingGapMs, long lockWarningThresholdMs) {
     ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(fair);
     readLock = new InstrumentedReadLock(name, logger, readWriteLock,
