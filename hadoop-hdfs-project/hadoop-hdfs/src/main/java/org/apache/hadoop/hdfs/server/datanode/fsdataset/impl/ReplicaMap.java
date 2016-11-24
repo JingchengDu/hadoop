@@ -234,7 +234,7 @@ class ReplicaMap {
   }
 
   /**
-   * Gets the read lock object used for synchronizing ReplicasMap
+   * Gets the read lock object used for synchronizing ReplicasMap.
    * @return read lock object
    */
   AutoCloseableLock getReadLock() {
@@ -242,7 +242,7 @@ class ReplicaMap {
   }
 
   /**
-   * Gets the write lock object used for synchronizing ReplicasMap
+   * Gets the write lock object used for synchronizing ReplicasMap.
    * @return write lock object
    */
   AutoCloseableLock getWriteLock() {
