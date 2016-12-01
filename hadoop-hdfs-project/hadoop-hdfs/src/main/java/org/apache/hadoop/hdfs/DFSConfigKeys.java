@@ -194,16 +194,17 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_ACCESSTIME_PRECISION_KEY =
       HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
   public static final long    DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT = 3600000;
-  public static final String  DFS_NAMENODE_REPLICATION_CONSIDERLOAD_KEY =
-      HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_REPLICATION_CONSIDERLOAD_KEY;
-  public static final boolean DFS_NAMENODE_REPLICATION_CONSIDERLOAD_DEFAULT = true;
-  public static final String  DFS_NAMENODE_REPLICATION_CONSIDERLOAD_FACTOR =
-      "dfs.namenode.replication.considerLoad.factor";
+  public static final String DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY =
+      HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY;
+  public static final boolean DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_DEFAULT =
+      true;
+  public static final String  DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR =
+      "dfs.namenode.redundancy.considerLoad.factor";
   public static final double
-      DFS_NAMENODE_REPLICATION_CONSIDERLOAD_FACTOR_DEFAULT = 2.0;
-  public static final String  DFS_NAMENODE_REPLICATION_INTERVAL_KEY =
-      HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY;
-  public static final int     DFS_NAMENODE_REPLICATION_INTERVAL_DEFAULT = 3;
+      DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT = 2.0;
+  public static final String DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY =
+      HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY;
+  public static final int DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_DEFAULT = 3;
   public static final String  DFS_NAMENODE_REPLICATION_MIN_KEY =
       HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_REPLICATION_MIN_KEY;
   public static final int     DFS_NAMENODE_REPLICATION_MIN_DEFAULT = 1;
@@ -398,7 +399,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_MIN_BLOCK_SIZE_KEY = "dfs.namenode.fs-limits.min-block-size";
   public static final long    DFS_NAMENODE_MIN_BLOCK_SIZE_DEFAULT = 1024*1024;
   public static final String  DFS_NAMENODE_MAX_BLOCKS_PER_FILE_KEY = "dfs.namenode.fs-limits.max-blocks-per-file";
-  public static final long    DFS_NAMENODE_MAX_BLOCKS_PER_FILE_DEFAULT = 1024*1024;
+  public static final long    DFS_NAMENODE_MAX_BLOCKS_PER_FILE_DEFAULT = 10*1000;
   public static final String  DFS_NAMENODE_MAX_XATTRS_PER_INODE_KEY = "dfs.namenode.fs-limits.max-xattrs-per-inode";
   public static final int     DFS_NAMENODE_MAX_XATTRS_PER_INODE_DEFAULT = 32;
   public static final String  DFS_NAMENODE_MAX_XATTR_SIZE_KEY = "dfs.namenode.fs-limits.max-xattr-size";

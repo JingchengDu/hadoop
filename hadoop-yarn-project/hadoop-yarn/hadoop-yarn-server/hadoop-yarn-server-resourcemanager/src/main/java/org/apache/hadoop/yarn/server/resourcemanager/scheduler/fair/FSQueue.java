@@ -27,6 +27,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -37,9 +38,16 @@ import org.apache.hadoop.yarn.api.records.QueueStatistics;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.security.AccessRequest;
+import org.apache.hadoop.yarn.security.PrivilegedEntity;
+import org.apache.hadoop.yarn.security.PrivilegedEntity.EntityType;
+import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.util.resource.Resources;
+
+import com.google.common.annotations.VisibleForTesting;
 
 @Private
 @Unstable
@@ -51,6 +59,8 @@ public abstract class FSQueue implements Queue, Schedulable {
   private Resource steadyFairShare = Resources.createResource(0, 0);
   private final String name;
   protected final FairScheduler scheduler;
+  private final YarnAuthorizationProvider authorizer;
+  private final PrivilegedEntity queueEntity;
   private final FSQueueMetrics metrics;
   
   protected final FSParentQueue parent;
@@ -76,6 +86,9 @@ public abstract class FSQueue implements Queue, Schedulable {
   public FSQueue(String name, FairScheduler scheduler, FSParentQueue parent) {
     this.name = name;
     this.scheduler = scheduler;
+    this.authorizer =
+        YarnAuthorizationProvider.getInstance(scheduler.getConf());
+    this.queueEntity = new PrivilegedEntity(EntityType.QUEUE, name);
     this.metrics = FSQueueMetrics.forQueue(getName(), parent, true, scheduler.getConf());
     this.parent = parent;
   }
@@ -94,16 +107,16 @@ public abstract class FSQueue implements Queue, Schedulable {
   public String getName() {
     return name;
   }
-  
+
   @Override
   public String getQueueName() {
     return name;
   }
-  
+
   public SchedulingPolicy getPolicy() {
     return policy;
   }
-  
+
   public FSParentQueue getParent() {
     return parent;
   }
@@ -158,6 +171,11 @@ public abstract class FSQueue implements Queue, Schedulable {
 
   public int getMaxRunningApps() {
     return maxRunningApps;
+  }
+
+  @VisibleForTesting
+  protected float getMaxAMShare() {
+    return maxAMShare;
   }
 
   public void setMaxAMShare(float maxAMShare){
@@ -253,36 +271,39 @@ public abstract class FSQueue implements Queue, Schedulable {
     return steadyFairShare;
   }
 
-  public void setSteadyFairShare(Resource steadyFairShare) {
+  void setSteadyFairShare(Resource steadyFairShare) {
     this.steadyFairShare = steadyFairShare;
     metrics.setSteadyFairShare(steadyFairShare);
   }
 
   public boolean hasAccess(QueueACL acl, UserGroupInformation user) {
-    return scheduler.getAllocationConfiguration().hasAccess(name, acl, user);
+    return authorizer.checkPermission(
+        new AccessRequest(queueEntity, user,
+            SchedulerUtils.toAccessType(acl), null, null,
+            Server.getRemoteAddress(), null));
   }
 
-  public long getFairSharePreemptionTimeout() {
+  long getFairSharePreemptionTimeout() {
     return fairSharePreemptionTimeout;
   }
 
-  public void setFairSharePreemptionTimeout(long fairSharePreemptionTimeout) {
+  void setFairSharePreemptionTimeout(long fairSharePreemptionTimeout) {
     this.fairSharePreemptionTimeout = fairSharePreemptionTimeout;
   }
 
-  public long getMinSharePreemptionTimeout() {
+  long getMinSharePreemptionTimeout() {
     return minSharePreemptionTimeout;
   }
 
-  public void setMinSharePreemptionTimeout(long minSharePreemptionTimeout) {
+  void setMinSharePreemptionTimeout(long minSharePreemptionTimeout) {
     this.minSharePreemptionTimeout = minSharePreemptionTimeout;
   }
 
-  public float getFairSharePreemptionThreshold() {
+  float getFairSharePreemptionThreshold() {
     return fairSharePreemptionThreshold;
   }
 
-  public void setFairSharePreemptionThreshold(float fairSharePreemptionThreshold) {
+  void setFairSharePreemptionThreshold(float fairSharePreemptionThreshold) {
     this.fairSharePreemptionThreshold = fairSharePreemptionThreshold;
   }
 
@@ -292,9 +313,17 @@ public abstract class FSQueue implements Queue, Schedulable {
 
   /**
    * Recomputes the shares for all child queues and applications based on this
-   * queue's current share
+   * queue's current share, and checks for starvation.
+   *
+   * @param checkStarvation whether to check for fairshare or minshare
+   *                        starvation on update
    */
-  public abstract void recomputeShares();
+  abstract void updateInternal(boolean checkStarvation);
+
+  public void update(Resource fairShare, boolean checkStarvation) {
+    setFairShare(fairShare);
+    updateInternal(checkStarvation);
+  }
 
   /**
    * Update the min/fair share preemption timeouts, threshold and preemption
@@ -347,7 +376,7 @@ public abstract class FSQueue implements Queue, Schedulable {
    * 
    * @return true if check passes (can assign) or false otherwise
    */
-  protected boolean assignContainerPreCheck(FSSchedulerNode node) {
+  boolean assignContainerPreCheck(FSSchedulerNode node) {
     if (!Resources.fitsIn(getResourceUsage(), maxShare)
         || node.getReservedContainer() != null) {
       return false;
@@ -403,7 +432,7 @@ public abstract class FSQueue implements Queue, Schedulable {
     return null;
   }
 
-  public boolean fitsInMaxShare(Resource additionalResource) {
+  boolean fitsInMaxShare(Resource additionalResource) {
     Resource usagePlusAddition =
         Resources.add(getResourceUsage(), additionalResource);
 
