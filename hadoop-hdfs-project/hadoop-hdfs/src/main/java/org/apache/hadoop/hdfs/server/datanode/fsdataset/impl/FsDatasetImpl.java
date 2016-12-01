@@ -1389,49 +1389,47 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   private ReplicaHandler recoverRbwImpl(ReplicaInPipeline rbw,
       ExtendedBlock b, long newGS, long minBytesRcvd, long maxBytesRcvd)
       throws IOException {
-    try (AutoCloseableLock lock = datasetWriteLock.acquire()) {
-      // check generation stamp
-      long replicaGenerationStamp = rbw.getGenerationStamp();
-      if (replicaGenerationStamp < b.getGenerationStamp() ||
-          replicaGenerationStamp > newGS) {
-        throw new ReplicaNotFoundException(
-            ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + b +
-                ". Expected GS range is [" + b.getGenerationStamp() + ", " +
-                newGS + "].");
-      }
-
-      // check replica length
-      long bytesAcked = rbw.getBytesAcked();
-      long numBytes = rbw.getNumBytes();
-      if (bytesAcked < minBytesRcvd || numBytes > maxBytesRcvd) {
-        throw new ReplicaNotFoundException("Unmatched length replica " +
-            rbw + ": BytesAcked = " + bytesAcked +
-            " BytesRcvd = " + numBytes + " are not in the range of [" +
-            minBytesRcvd + ", " + maxBytesRcvd + "].");
-      }
-
-      FsVolumeReference ref = rbw.getReplicaInfo()
-          .getVolume().obtainReference();
-      try {
-        // Truncate the potentially corrupt portion.
-        // If the source was client and the last node in the pipeline was lost,
-        // any corrupt data written after the acked length can go unnoticed.
-        if (numBytes > bytesAcked) {
-          rbw.getReplicaInfo().truncateBlock(bytesAcked);
-          rbw.setNumBytes(bytesAcked);
-          rbw.setLastChecksumAndDataLen(bytesAcked, null);
-        }
-
-        // bump the replica's generation stamp to newGS
-        rbw.getReplicaInfo().bumpReplicaGS(newGS);
-      } catch (IOException e) {
-        IOUtils.cleanup(null, ref);
-        throw e;
-      }
-      return new ReplicaHandler(rbw, ref);
+    // check generation stamp
+    long replicaGenerationStamp = rbw.getGenerationStamp();
+    if (replicaGenerationStamp < b.getGenerationStamp() ||
+        replicaGenerationStamp > newGS) {
+      throw new ReplicaNotFoundException(
+          ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + b +
+              ". Expected GS range is [" + b.getGenerationStamp() + ", " +
+              newGS + "].");
     }
+
+    // check replica length
+    long bytesAcked = rbw.getBytesAcked();
+    long numBytes = rbw.getNumBytes();
+    if (bytesAcked < minBytesRcvd || numBytes > maxBytesRcvd) {
+      throw new ReplicaNotFoundException("Unmatched length replica " +
+          rbw + ": BytesAcked = " + bytesAcked +
+          " BytesRcvd = " + numBytes + " are not in the range of [" +
+          minBytesRcvd + ", " + maxBytesRcvd + "].");
+    }
+
+    FsVolumeReference ref = rbw.getReplicaInfo()
+        .getVolume().obtainReference();
+    try {
+      // Truncate the potentially corrupt portion.
+      // If the source was client and the last node in the pipeline was lost,
+      // any corrupt data written after the acked length can go unnoticed.
+      if (numBytes > bytesAcked) {
+        rbw.getReplicaInfo().truncateBlock(bytesAcked);
+        rbw.setNumBytes(bytesAcked);
+        rbw.setLastChecksumAndDataLen(bytesAcked, null);
+      }
+
+      // bump the replica's generation stamp to newGS
+      rbw.getReplicaInfo().bumpReplicaGS(newGS);
+    } catch (IOException e) {
+      IOUtils.cleanup(null, ref);
+      throw e;
+    }
+    return new ReplicaHandler(rbw, ref);
   }
-  
+
   @Override // FsDatasetSpi
   public ReplicaInPipeline convertTemporaryToRbw(
       final ExtendedBlock b) throws IOException {
@@ -1731,7 +1729,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    * Gets a list of references to the finalized blocks for the given block pool.
    * <p>
    * Callers of this function should call
-   * {@link FsDatasetSpi#acquireDatasetLock} to avoid blocks' status being
+   * {@link FsDatasetSpi#acquireDatasetReadLock} or
+   * {@link FsDatasetSpi#acquireDatasetWriteLock} to avoid blocks' status being
    * changed during list iteration.
    * </p>
    * @return a list of references to the finalized blocks for the given block
@@ -1739,16 +1738,14 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
    */
   @Override
   public List<ReplicaInfo> getFinalizedBlocks(String bpid) {
-    try (AutoCloseableLock lock = datasetReadLock.acquire()) {
-      final List<ReplicaInfo> finalized = new ArrayList<ReplicaInfo>(
-          volumeMap.size(bpid));
-      for (ReplicaInfo b : volumeMap.replicas(bpid)) {
-        if (b.getState() == ReplicaState.FINALIZED) {
-          finalized.add(b);
-        }
+    final List<ReplicaInfo> finalized = new ArrayList<ReplicaInfo>(
+        volumeMap.size(bpid));
+    for (ReplicaInfo b : volumeMap.replicas(bpid)) {
+      if (b.getState() == ReplicaState.FINALIZED) {
+        finalized.add(b);
       }
-      return finalized;
     }
+    return finalized;
   }
 
   /**
