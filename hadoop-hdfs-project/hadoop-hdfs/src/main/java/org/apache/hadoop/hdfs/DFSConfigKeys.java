@@ -1307,4 +1307,18 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   @Deprecated
   public static final long    DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT =
       HdfsClientConfigKeys.DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT;
+
+  public static final String VOLUME_HEALTH_CHECK_SCRIPT_PATH = "volume-health-checker.script.path";
+  public static final String VOLUME_HEALTH_CHECK_INTERVAL_MS =
+      "volume-health-checker.script.interval-ms";
+  public static final long DEFAULT_VOLUME_HEALTH_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+  public static final String VOLUME_HEALTH_CHECK_SCRIPT_TIMEOUT_MS =
+      "volume-health-checker.script.timeout-ms";
+  public static final long DEFAULT_VOLUME_HEALTH_CHECK_SCRIPT_TIMEOUT_MS =
+      2 * DEFAULT_VOLUME_HEALTH_CHECK_INTERVAL_MS;
+  public static final String VOLUME_HEALTH_CHECK_SCRIPT_OPTS = "volume-health-checker.script.opts";
+  public static final String VOLUME_HEALTH_CHECK_SCRIPT_OUTPUT_PARSER =
+      "volume-health-checker.script.output.parser";
+  public static final String VOLUME_HEALTH_CHECK_SCRIPT_OUTPUT_PARSER_ARGS =
+      "volume-health-checker.script.output.parser.args";
 }

@@ -885,6 +885,11 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   void checkDirs() throws DiskErrorException {
     // TODO:FEDERATION valid synchronization
+    if (!dataset
+        .isHealth(this.getCurrentDir().getParentFile().getAbsolutePath())) {
+      throw new DiskErrorException(
+          "The volume " + this.toString() + " has errors.");
+    }
     for(BlockPoolSlice s : bpSlices.values()) {
       s.checkDirs();
     }

@@ -275,7 +275,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @VisibleForTesting
   final AutoCloseableLock datasetLock;
   private final Condition datasetLockCondition;
-  
+
+  private FsVolumeHealthScriptService volumeHeathScriptService;
+
   /**
    * An FSDataset has a directory where it loads its data files.
    */
@@ -366,6 +368,62 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     maxDataLength = conf.getInt(
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH,
         CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT);
+    startVolumeHealthScriptService(conf);
+  }
+
+  private void startVolumeHealthScriptService(Configuration conf) {
+    String volumeHealthScript =
+        conf.get(DFSConfigKeys.VOLUME_HEALTH_CHECK_SCRIPT_PATH);
+    if(!FsVolumeHealthScriptService.shouldRun(volumeHealthScript)) {
+      LOG.info("Volume health check script is not available "
+          + "or doesn't have execute permission, so not "
+          + "starting the node health script runner.");
+      return;
+    }
+    String cn = conf.get(DFSConfigKeys.VOLUME_HEALTH_CHECK_SCRIPT_OUTPUT_PARSER);
+    if (cn == null || cn.trim().isEmpty()) {
+      LOG.info("The output parser is not available, so not "
+          + "starting the volume health script runner.");
+      return;
+    }
+    String[] parserArgs = conf.getStrings(
+      DFSConfigKeys.VOLUME_HEALTH_CHECK_SCRIPT_OUTPUT_PARSER_ARGS);
+    FsVolumeHealthScriptOutputParser parser = null;
+    try {
+      if (parserArgs == null || parserArgs.length == 0) {
+        parser =
+            (FsVolumeHealthScriptOutputParser) Class.forName(cn).newInstance();
+      } else {
+        parser = (FsVolumeHealthScriptOutputParser) Class.forName(cn)
+            .getConstructor(String[].class)
+            .newInstance(new Object[] { parserArgs });
+      }
+    } catch (Exception e) {
+      LOG.warn("The output parser cannot be instantiated, so not "
+          + "starting the volume health script runner.",
+        e);
+      return;
+    }
+    long nmCheckintervalTime = conf.getLong(
+        DFSConfigKeys.VOLUME_HEALTH_CHECK_INTERVAL_MS,
+        DFSConfigKeys.DEFAULT_VOLUME_HEALTH_CHECK_INTERVAL_MS);
+    long scriptTimeout = conf.getLong(DFSConfigKeys.VOLUME_HEALTH_CHECK_SCRIPT_TIMEOUT_MS,
+      DFSConfigKeys.DEFAULT_VOLUME_HEALTH_CHECK_SCRIPT_TIMEOUT_MS);
+    String[] scriptArgs =
+        conf.getStrings(DFSConfigKeys.VOLUME_HEALTH_CHECK_SCRIPT_OPTS, new String[] {});
+    volumeHeathScriptService = new FsVolumeHealthScriptService(volumeHealthScript,
+        nmCheckintervalTime, scriptTimeout, scriptArgs, parser);
+    volumeHeathScriptService.startService();
+  }
+
+  boolean isHealth(String path) {
+    return volumeHeathScriptService == null ? true
+        : volumeHeathScriptService.isHealth(path);
+  }
+
+  @VisibleForTesting
+  FsVolumeHealthScriptService getFsVolumeHealthScriptService() {
+    return volumeHeathScriptService;
   }
 
   /**
@@ -2317,6 +2375,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   @Override // FsDatasetSpi
   public void shutdown() {
     fsRunning = false;
+
+    if (volumeHeathScriptService != null) {
+      volumeHeathScriptService.stopService();
+    }
 
     if (lazyWriter != null) {
       ((LazyWriter) lazyWriter.getRunnable()).stop();
